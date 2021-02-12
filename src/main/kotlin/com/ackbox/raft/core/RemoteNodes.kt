@@ -11,21 +11,21 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import java.time.Clock
 
-class RemoteNodes(id: String, channels: List<NamedChannel>, private val clock: Clock) {
+class RemoteNodes(localNodeId: String, channels: List<NamedChannel>, clock: Clock) {
 
-    private val clients = channels.map { it.id to RemoteNode(id, it, clock) }.toMap()
+    private val remotes = channels.map { it.id to RemoteNode(localNodeId, it, clock) }.toMap()
 
-    fun size(): Int = clients.size
+    fun size(): Int = remotes.size
 
     fun appendItems(metadata: Metadata, log: ReplicatedLog): List<RemoteNodeState> {
         return runBlocking(Dispatchers.IO) {
-            clients.map { (_, peer) -> async { peer.appendItems(metadata, log) } }.map { it.await() }
+            remotes.map { (_, remote) -> async { remote.appendItems(metadata, log) } }.map { it.await() }
         }
     }
 
     fun requestVote(metadata: Metadata, log: ReplicatedLog): List<Boolean> {
         return runBlocking(Dispatchers.IO) {
-            clients.map { (_, peer) -> async { peer.requestVote(metadata, log) } }.map { it.await() }
+            remotes.map { (_, remote) -> async { remote.requestVote(metadata, log) } }.map { it.await() }
         }
     }
 

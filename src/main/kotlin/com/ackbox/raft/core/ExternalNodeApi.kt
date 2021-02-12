@@ -25,7 +25,7 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
     private val logger = NodeLogger.from(node.nodeId, ExternalNodeApi::class)
 
     override suspend fun set(request: SetRequest): SetReply {
-        logger.debug("Received set request [{}]", request)
+        logger.debug("Received SET request [{}]", request)
         return try {
             val input = Set.Input(listOf(ByteBuffer.wrap(request.entry.toByteArray())))
             val output = node.setItem(input)
@@ -34,22 +34,22 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             logger.warn("Received SET request while not leader", e.knownLeaderId, e)
             createFailureSetReply(e.knownLeaderId)
         } catch (e: CommitIndexMismatchException) {
-            logger.warn("Commit index mismatch", e)
+            logger.warn("Commit index mismatch for SET request", e)
             createFailureSetReply(e.leaderId)
         }
     }
 
     override suspend fun get(request: GetRequest): GetReply {
-        logger.debug("Received get request [{}]", request)
+        logger.debug("Received GET request [{}]", request)
         return try {
             val input = Get.Input(request.sqn)
             val output = node.getItem(input)
             createSuccessGetReply(output.leaderId, output.item)
         } catch (e: NotLeaderException) {
-            logger.warn("Received SET request while not leader", e.knownLeaderId, e)
+            logger.warn("Received GET request while not leader", e.knownLeaderId, e)
             createFailureGetReply(e.knownLeaderId)
         } catch (e: CommitIndexMismatchException) {
-            logger.warn("Commit index mismatch", e)
+            logger.warn("Commit index mismatch for GET request", e)
             createFailureGetReply(e.leaderId)
         }
     }

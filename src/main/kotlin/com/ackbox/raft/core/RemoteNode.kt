@@ -18,26 +18,25 @@ import java.util.concurrent.atomic.AtomicReference
 class RemoteNode(localNodeId: String, private val channel: NamedChannel, private val clock: Clock) {
 
     private val logger = NodeLogger.from(localNodeId, RemoteNode::class)
-    private val client = PrivateNodeGrpc.newBlockingStub(channel)
-    private val state = AtomicReference(RemoteNodeState())
+    private val remoteClient = PrivateNodeGrpc.newBlockingStub(channel)
+    private val remoteState = AtomicReference(RemoteNodeState())
 
     fun appendItems(metadata: Metadata, log: ReplicatedLog): RemoteNodeState {
-        // Update internal representation of the peer node according to the reply.
-        // Lock on the state and return a consistent snapshot updated according to the
-        // response from the peer.
+        // Update internal representation of the peer node according to the reply. Lock on the
+        // state and return a consistent snapshot updated according to the response from the peer.
         val leaderTerm = metadata.getCurrentTerm()
-        return state.updateAndGet { snapshot ->
+        return remoteState.updateAndGet { state ->
             // Assemble all required log items that need to be replicated to peers in the cluster.
-            val previousItem = log.getItem(snapshot.nextLogIndex - 1)!!
-            val items = retrieveItems(snapshot, log)
+            val previousItem = log.getItem(state.nextLogIndex - 1)!!
+            val items = retrieveItems(state, log)
 
             // Send the append request to the peer node.
             logger.info("Sending append entries to peer=[{}]", channel.id)
             val reply = try {
-                client.append(createAppendRequest(metadata, previousItem, items))
+                remoteClient.append(createAppendRequest(metadata, previousItem, items))
             } catch (e: StatusRuntimeException) {
                 logger.warn("Error while contacting remote", e)
-                return@updateAndGet snapshot
+                return@updateAndGet state
             }
 
             // Check whether the peer node and this node agree around leadership.
@@ -49,13 +48,13 @@ class RemoteNode(localNodeId: String, private val channel: NamedChannel, private
                 // If the response from the peer is success, it means that the peer's log is caught up
                 // with leader's. It is safe to count the peer as successful entry replication.
                 logger.info("Peer [{}] is successfully caught up", channel.id)
-                snapshot.copy(nextLogIndex = reply.lastLogIndex + 1, matchLogIndex = reply.lastLogIndex)
+                state.copy(nextLogIndex = reply.lastLogIndex + 1, matchLogIndex = reply.lastLogIndex)
             } else {
                 // If the response from the peer is NOT success, it means that the peer's log is caught up
                 // with leader's. We update the peer state according to its response in an attempt to
                 // fix log inconsistencies or missing entries.
                 logger.info("Peer [{}] is needs to catch up with leader", channel.id)
-                snapshot.copy(nextLogIndex = reply.lastLogIndex + 1)
+                state.copy(nextLogIndex = reply.lastLogIndex + 1)
             }
         }
     }
@@ -68,7 +67,7 @@ class RemoteNode(localNodeId: String, private val channel: NamedChannel, private
 
         // Send vote request to peer node.
         val reply = try {
-            client.vote(createVoteRequest(metadata, candidateTerm, lastItem))
+            remoteClient.vote(createVoteRequest(metadata, candidateTerm, lastItem))
         } catch (e: StatusRuntimeException) {
             logger.warn("Error while contacting remote", e)
             return false

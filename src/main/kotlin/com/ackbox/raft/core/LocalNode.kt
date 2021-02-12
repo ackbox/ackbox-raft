@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
  *
  * @see [Raft Paper](https://raft.github.io/raft.pdf)
  */
-class LocalNode(private val locked: LocalNodeState, private val peers: RemoteNodes) : LeaderNode, ReplicaNode {
+class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteNodes) : LeaderNode, ReplicaNode {
 
     private val logger = NodeLogger.from(locked.nodeId, LocalNode::class)
 
@@ -60,7 +60,7 @@ class LocalNode(private val locked: LocalNodeState, private val peers: RemoteNod
             // node will need to catch up with leader's log. In order to do so, we use the
             // peer#nextLogIndex and peer#matchLogIndex information.
             val peerStates = try {
-                peers.appendItems(state.getMetadata(), log)
+                remotes.appendItems(state.getMetadata(), log)
             } catch (e: ReplyTermInvariantException) {
                 // Peers will throw term invariant exception whenever they detect that their
                 // term is greater than the node that generated the append request (case of
@@ -75,7 +75,7 @@ class LocalNode(private val locked: LocalNodeState, private val peers: RemoteNod
                 .apply { peerStates.forEach { add(it.matchLogIndex) } }
                 .apply { add(lastLogItemIndex) }
                 .sorted()
-            val commitIndex = matchIndexes[peers.size() / 2]
+            val commitIndex = matchIndexes[remotes.size() / 2]
             logger.info("Commit index updated from [{}] to [{}]", state.getCommitIndex(), commitIndex)
 
             // Only update the commit index if there's consensus in the replication results
@@ -182,7 +182,7 @@ class LocalNode(private val locked: LocalNodeState, private val peers: RemoteNod
             val votes = locked.withLock(REQUEST_VOTE_OPERATION) { state ->
                 state.transitionToCandidate()
                 try {
-                    peers.requestVote(state.getMetadata(), state.getLog())
+                    remotes.requestVote(state.getMetadata(), state.getLog())
                 } catch (e: ReplyTermInvariantException) {
                     state.transitionToFollower(e.remoteTerm)
                     throw e
@@ -193,7 +193,7 @@ class LocalNode(private val locked: LocalNodeState, private val peers: RemoteNod
             // voting for itself.
             locked.withLock(REQUEST_VOTE_OPERATION) { state ->
                 val total = 1 + votes.map { if (it) 1 else 0 }.sum()
-                if (total > peers.size() / 2) {
+                if (total > remotes.size() / 2) {
                     logger.info("Node has been elected as leader")
                     state.transitionToLeader()
                 } else {
