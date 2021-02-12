@@ -45,14 +45,22 @@ message VoteRequest {
 
 // The vote response message.
 message VoteReply {
+    // Possible status for a vote request.
+    // - VOTE_GRANTED: if node granted the vote to the candidate.
+    // - VOTE_NOT_GRANTED: if node did NOT grant the vote to the candidate.
+    enum Status {
+        VOTE_GRANTED = 0;
+        VOTE_NOT_GRANTED = 1;
+    }
+
     // Request timestamp (wall clock from issuer).
     int64 timestamp = 1;
 
     // Current term, for candidate to update itself.
     int64 currentTerm = 2;
 
-    // True if candidate received vote.
-    bool isVoteGranted = 3;
+    // Response status for the vote request.
+    Status status = 3;
 }
 
 // The append entry request message.
@@ -88,6 +96,17 @@ message AppendRequest {
 
 // The append entry response message.
 message AppendReply {
+    // Possible status for an append request.
+    // - SUCCESS: if follower was able to successfully append the log entries.
+    // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster.
+    // - TERM_MISMATCH: if follower's term does not agree with issuer of the request.
+    // - LOG_STATE_MISMATCH: if follower contained entry matching previousLogIndex and previousLogTerm.
+    enum Status {
+        SUCCESS = 0;
+        LEADER_MISMATCH = 1;
+        TERM_MISMATCH = 2;
+        LOG_STATE_MISMATCH = 3;
+    }
     // Request timestamp (wall clock from issuer).
     int64 timestamp = 1;
 
@@ -97,8 +116,8 @@ message AppendReply {
     // Last entry index found in the node's log.
     int64 lastLogIndex = 3;
 
-    // True if follower contained entry matching previousLogIndex and previousLogTerm.
-    bool isSuccess = 4;
+    // Status of the response if follower contained entry matching previousLogIndex and previousLogTerm.
+    Status status = 4;
 }
 
 // Set replicated entry request message.
@@ -112,6 +131,15 @@ message SetRequest {
 
 // Set replicated entry response message.
 message SetReply {
+    // Possible status for a set request.
+    // - SUCCESS: leader node was able to append and commit entries.
+    // - NOT_LEADER: request was sent to a node that is not the leader.
+    // - COMMIT_ERROR: leader had issues committing the entries.
+    enum Status {
+        SUCCESS = 0;
+        NOT_LEADER = 1;
+        COMMIT_ERROR = 2;
+    }
     // Request timestamp (wall clock from issuer).
     int64 timestamp = 1;
 
@@ -121,8 +149,8 @@ message SetReply {
     // Sequence number assigned to the entry.
     int64 sqn = 3;
 
-    // True if the log was correctly replicated.
-    bool isSuccess = 4;
+    // Status code for the response.
+    Status status = 4;
 }
 
 // Get replicated entry request message.
@@ -136,6 +164,13 @@ message GetRequest {
 
 // Get replicated entry response message.
 message GetReply {
+// Possible status for a set request.
+    // - SUCCESS: leader node was able retrieve entries.
+    // - NOT_LEADER: request was sent to a node that is not the leader.
+    enum Status {
+        SUCCESS = 0;
+        NOT_LEADER = 1;
+    }
     // Request timestamp (wall clock from issuer).
     int64 timestamp = 1;
 
@@ -145,6 +180,6 @@ message GetReply {
     // Data to be replicated across nodes.
     bytes entry = 3;
 
-    // True if the log was correctly replicated.
-    bool isSuccess = 4;
+    // Status code for the response.
+    Status status = 4;
 }

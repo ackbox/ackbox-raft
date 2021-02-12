@@ -9,8 +9,8 @@ import com.ackbox.raft.core.LeaderNode.Get
 import com.ackbox.raft.core.LeaderNode.Set
 import com.ackbox.raft.state.ReplicatedLog
 import com.ackbox.raft.support.CommitIndexMismatchException
-import com.ackbox.raft.support.NotLeaderException
 import com.ackbox.raft.support.NodeLogger
+import com.ackbox.raft.support.NotLeaderException
 import com.google.protobuf.ByteString
 import java.nio.ByteBuffer
 import java.time.Clock
@@ -32,10 +32,10 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             createSuccessSetReply(output.leaderId, output.itemSqn)
         } catch (e: NotLeaderException) {
             logger.warn("Received SET request while not leader", e.knownLeaderId, e)
-            createFailureSetReply(e.knownLeaderId)
+            createFailureSetReply(e.knownLeaderId, SetReply.Status.NOT_LEADER)
         } catch (e: CommitIndexMismatchException) {
             logger.warn("Commit index mismatch for SET request", e)
-            createFailureSetReply(e.leaderId)
+            createFailureSetReply(e.leaderId, SetReply.Status.COMMIT_ERROR)
         }
     }
 
@@ -47,10 +47,7 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             createSuccessGetReply(output.leaderId, output.item)
         } catch (e: NotLeaderException) {
             logger.warn("Received GET request while not leader", e.knownLeaderId, e)
-            createFailureGetReply(e.knownLeaderId)
-        } catch (e: CommitIndexMismatchException) {
-            logger.warn("Commit index mismatch for GET request", e)
-            createFailureGetReply(e.leaderId)
+            createFailureGetReply(e.knownLeaderId, GetReply.Status.NOT_LEADER)
         }
     }
 
@@ -59,16 +56,16 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             .setTimestamp(clock.millis())
             .setSqn(sqn)
             .setLeaderId(leaderId)
-            .setIsSuccess(true)
+            .setStatus(SetReply.Status.SUCCESS)
             .build()
     }
 
-    private fun createFailureSetReply(leaderId: String?): SetReply {
+    private fun createFailureSetReply(leaderId: String?, status: SetReply.Status): SetReply {
         return SetReply.newBuilder()
             .setTimestamp(clock.millis())
             .setSqn(UNDEFINED_ID)
             .setLeaderId(leaderId)
-            .setIsSuccess(false)
+            .setStatus(status)
             .build()
     }
 
@@ -77,15 +74,15 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             .setTimestamp(clock.millis())
             .setLeaderId(leaderId)
             .setEntry(item?.let { ByteString.copyFrom(it.value) })
-            .setIsSuccess(true)
+            .setStatus(GetReply.Status.SUCCESS)
             .build()
     }
 
-    private fun createFailureGetReply(leaderId: String?): GetReply {
+    private fun createFailureGetReply(leaderId: String?, status: GetReply.Status): GetReply {
         return GetReply.newBuilder()
             .setTimestamp(clock.millis())
             .setLeaderId(leaderId)
-            .setIsSuccess(false)
+            .setStatus(status)
             .build()
     }
 }

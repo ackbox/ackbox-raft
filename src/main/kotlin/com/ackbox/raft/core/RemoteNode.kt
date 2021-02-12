@@ -1,7 +1,9 @@
 package com.ackbox.raft.core
 
+import com.ackbox.raft.AppendReply
 import com.ackbox.raft.AppendRequest
 import com.ackbox.raft.PrivateNodeGrpc
+import com.ackbox.raft.VoteReply
 import com.ackbox.raft.VoteRequest
 import com.ackbox.raft.networking.NamedChannel
 import com.ackbox.raft.state.Metadata
@@ -44,7 +46,7 @@ class RemoteNode(localNodeId: String, private val channel: NamedChannel, private
                 throw ReplyTermInvariantException(leaderTerm, reply.currentTerm)
             }
 
-            if (reply.isSuccess) {
+            if (reply.status == AppendReply.Status.SUCCESS) {
                 // If the response from the peer is success, it means that the peer's log is caught up
                 // with leader's. It is safe to count the peer as successful entry replication.
                 logger.info("Peer [{}] is successfully caught up", channel.id)
@@ -79,7 +81,7 @@ class RemoteNode(localNodeId: String, private val channel: NamedChannel, private
         }
 
         // If terms are compatible, return whether the node voted for the candidate.
-        return reply.isVoteGranted
+        return reply.status == VoteReply.Status.VOTE_GRANTED
     }
 
     private fun createAppendRequest(metadata: Metadata, previousItem: LogItem, items: List<LogItem>): AppendRequest {

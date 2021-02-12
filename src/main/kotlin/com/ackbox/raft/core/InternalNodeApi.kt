@@ -1,6 +1,7 @@
 package com.ackbox.raft.core
 
 import com.ackbox.raft.AppendReply
+import com.ackbox.raft.AppendReply.Status
 import com.ackbox.raft.AppendRequest
 import com.ackbox.raft.PrivateNodeGrpcKt.PrivateNodeCoroutineImplBase
 import com.ackbox.raft.VoteReply
@@ -36,13 +37,13 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             createSuccessAppendReply(output.currentTerm, output.lastLogItemIndex)
         } catch (e: LeaderMismatchException) {
             logger.warn("Unable to complete request due to leader mismatch", e)
-            createFailureAppendReply(e.term, e.lastLogIndex)
+            createFailureAppendReply(e.term, e.lastLogIndex, Status.LEADER_MISMATCH)
         } catch (e: RequestTermInvariantException) {
             logger.warn("Unable to complete request due to termination invariant violation", e)
-            createFailureAppendReply(e.term, e.lastLogIndex)
+            createFailureAppendReply(e.term, e.lastLogIndex, Status.TERM_MISMATCH)
         } catch (e: ReplicaStateMismatchException) {
-            logger.warn("Unable to complete request due state mismatch", e)
-            createFailureAppendReply(e.term, e.lastLogIndex)
+            logger.warn("Unable to complete request due log state mismatch", e)
+            createFailureAppendReply(e.term, e.lastLogIndex, Status.LOG_STATE_MISMATCH)
         }
     }
 
@@ -71,16 +72,16 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             .setTimestamp(clock.millis())
             .setCurrentTerm(currentTerm)
             .setLastLogIndex(lastLogIndex)
-            .setIsSuccess(true)
+            .setStatus(Status.SUCCESS)
             .build()
     }
 
-    private fun createFailureAppendReply(currentTerm: Long, lastLogIndex: Long): AppendReply {
+    private fun createFailureAppendReply(currentTerm: Long, lastLogIndex: Long, status: Status): AppendReply {
         return AppendReply.newBuilder()
             .setTimestamp(clock.millis())
             .setCurrentTerm(currentTerm)
             .setLastLogIndex(lastLogIndex)
-            .setIsSuccess(false)
+            .setStatus(status)
             .build()
     }
 
@@ -88,7 +89,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         return VoteReply.newBuilder()
             .setTimestamp(clock.millis())
             .setCurrentTerm(currentTerm)
-            .setIsVoteGranted(true)
+            .setStatus(VoteReply.Status.VOTE_GRANTED)
             .build()
     }
 
@@ -96,7 +97,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         return VoteReply.newBuilder()
             .setTimestamp(clock.millis())
             .setCurrentTerm(currentTerm)
-            .setIsVoteGranted(false)
+            .setStatus(VoteReply.Status.VOTE_NOT_GRANTED)
             .build()
     }
 
