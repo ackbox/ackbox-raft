@@ -46,18 +46,6 @@ class Metadata(val nodeId: String) {
 
     private val logger = NodeLogger.from(nodeId, NodeNetworking::class)
 
-    enum class NodeMode { FOLLOWER, CANDIDATE, LEADER }
-
-//    fun getCurrentTerm(): Long = currentTerm
-
-//    fun getLeaderId(): String? = leaderId
-
-//    fun getCommitIndex(): Long = commitIndex
-
-//    fun getLastAppliedLogIndex(): Long = lastAppliedLogIndex
-
-//    fun getMode(): NodeMode = mode
-
     fun canAcceptLeader(candidateId: String): Boolean {
         return votedFor == null || votedFor == candidateId
     }
@@ -106,4 +94,6 @@ class Metadata(val nodeId: String) {
         votedFor = nodeId
         mode = NodeMode.LEADER
     }
+
+    enum class NodeMode { FOLLOWER, CANDIDATE, LEADER }
 }

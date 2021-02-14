@@ -19,11 +19,11 @@ object Configuration {
     private val nodeAddress2 = NodeNetAddress("2", "localhost", 50052)
     private val nodeAddress3 = NodeNetAddress("3", "localhost", 50053)
 
-    fun getNode1Config() = NodeConfig.newConfig(nodeAddress1, nodeAddress2, nodeAddress3)
+    val node1Config get() = NodeConfig.newConfig(nodeAddress1, nodeAddress2, nodeAddress3)
 
-    fun getNode2Config() = NodeConfig.newConfig(nodeAddress2, nodeAddress1, nodeAddress3)
+    val node2Config get() = NodeConfig.newConfig(nodeAddress2, nodeAddress1, nodeAddress3)
 
-    fun getNode3Config() = NodeConfig.newConfig(nodeAddress3, nodeAddress2, nodeAddress1)
+    val node3Config get() = NodeConfig.newConfig(nodeAddress3, nodeAddress2, nodeAddress1)
 }
 
 class LoopNode(private val config: NodeConfig) {

@@ -5,16 +5,15 @@ import com.ackbox.raft.core.LeaderNode.Get
 import com.ackbox.raft.core.LeaderNode.Set
 import com.ackbox.raft.core.ReplicaNode.Append
 import com.ackbox.raft.core.ReplicaNode.Vote
+import com.ackbox.raft.log.ReplicatedLog.LogItem
 import com.ackbox.raft.state.Callback
 import com.ackbox.raft.state.LocalNodeState
 import com.ackbox.raft.state.Metadata
-import com.ackbox.raft.log.ReplicatedLog.LogItem
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NotLeaderException
 import com.ackbox.raft.support.ReplicaStateMismatchException
 import com.ackbox.raft.support.ReplyTermInvariantException
-import java.nio.ByteBuffer
 
 /**
  * Raft node API implementation. The behavior implemented here follows that paragraphs $5.1, $5.2, $5.3 and $5.4
@@ -41,7 +40,7 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
 
     fun describeState() {
         locked.withLock(DESCRIBE_STATE_OPERATION) { state ->
-            state.getLog().describe()
+            state.log.describe()
         }
     }
 
@@ -49,15 +48,15 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
         return locked.withLock(REQUEST_APPEND_OPERATION) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting
             // caller know who is the leader for the current term.
-            val leaderId = state.getCurrentLeaderId()
-            if (state.getCurrentMode() != Metadata.NodeMode.LEADER) {
+            val metadata = state.metadata
+            val leaderId = metadata.leaderId
+            if (metadata.mode != Metadata.NodeMode.LEADER) {
                 throw NotLeaderException(leaderId)
             }
 
             // Apply entries the replicated to the leader's log before doing anything.
-            val log = state.getLog()
-            val leaderTerm = state.getCurrentTerm()
-            val items = convertToLogItems(leaderTerm, log.getLastItemIndex(), input.data)
+            val leaderTerm = metadata.currentTerm
+            val items = convertToLogItems(leaderTerm, state.log.getLastItemIndex(), input.data)
             val lastLogItemIndex = state.appendLogItems(items)
 
             // Dispatch requests in parallel to all peers in the cluster in order to append
@@ -66,7 +65,7 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
             // node will need to catch up with leader's log. In order to do so, we use the
             // peer#nextLogIndex and peer#matchLogIndex information.
             val peerStates = try {
-                remotes.appendItems(state.getMetadata(), log)
+                remotes.appendItems(metadata, state.log)
             } catch (e: ReplyTermInvariantException) {
                 // Peers will throw term invariant exception whenever they detect that their
                 // term is greater than the node that generated the append request (case of
@@ -81,13 +80,13 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
                 .apply { peerStates.forEach { add(it.matchLogIndex) } }
                 .apply { add(lastLogItemIndex) }
                 .sorted()
-            val commitIndex = matchIndexes[remotes.size() / 2]
-            logger.info("Commit index updated from [{}] to [{}]", state.getCommitIndex(), commitIndex)
+            val commitIndex = matchIndexes[remotes.size / 2]
+            logger.info("Commit index updated from [{}] to [{}]", metadata.commitIndex, commitIndex)
 
             // Only update the commit index if there's consensus in the replication results
             // from all the peers in the cluster.
-            if (commitIndex < state.getCommitIndex()) {
-                throw CommitIndexMismatchException(leaderId, state.getCommitIndex(), commitIndex)
+            if (commitIndex < metadata.commitIndex) {
+                throw CommitIndexMismatchException(leaderId, metadata.commitIndex, commitIndex)
             }
 
             // Commit items that were confirmed to be replicated across the cluster.
@@ -100,13 +99,13 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
         return locked.withLock(REQUEST_RETRIEVE_OPERATION) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting
             // caller know who is the leader for the current term.
-            val leaderId = state.getCurrentLeaderId()
-            if (state.getCurrentMode() != Metadata.NodeMode.LEADER) {
+            val leaderId = state.metadata.leaderId
+            if (state.metadata.mode != Metadata.NodeMode.LEADER) {
                 throw NotLeaderException(leaderId)
             }
 
             // Retrieve committed entry from state machine.
-            Get.Output(state.getCurrentLeaderId(), state.getCommittedLogItem(input.itemSqn))
+            Get.Output(leaderId, state.getCommittedLogItem(input.itemSqn))
         }
     }
 
@@ -118,7 +117,7 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
             // are detected, force them to step down and restart an election by incrementing the term.
             val leaderId = input.leaderId
             val leaderTerm = input.leaderTerm
-            val currentTerm = state.getCurrentTerm()
+            val currentTerm = state.metadata.currentTerm
 
             // We ensure a valid leader by checking the following cases:
             //   1. The current node has a smaller currentTerm than leaderTerm.
@@ -139,11 +138,11 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
             // instance, entries will be retransmitted until the logs are synchronized.
             val previousLogIndex = input.previousLogIndex
             val previousLogTerm = input.previousLogTerm
-            if (!state.getLog().containsItem(previousLogIndex, previousLogTerm)) {
+            if (!state.log.containsItem(previousLogIndex, previousLogTerm)) {
                 logger.info("Log mismatch for logIndex=[{}] and logTerm=[{}]", previousLogIndex, previousLogTerm)
                 // Optimization can be done in order to ensure minimum retransmission. Instead of returning
                 // previousLogIndex - 1 for the case of index mismatch, we can return state.getLog().getLastItemIndex().
-                val lastLogItem = state.getLog().getItem(state.getLog().getLastItemIndex())!!
+                val lastLogItem = state.log.getItem(state.log.getLastItemIndex())!!
                 val lastLogIndex = lastLogItem.index
                 val correctionLogIndex = if (lastLogIndex == previousLogIndex) previousLogIndex - 1 else lastLogIndex
                 throw ReplicaStateMismatchException(currentTerm, correctionLogIndex)
@@ -176,7 +175,7 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
             // if its log is behind.
             logger.info("Vote granted to candidateId=[{}]", input.candidateId)
             state.updateVote(input.candidateId)
-            return@withLock Vote.Output(state.getCurrentTerm())
+            return@withLock Vote.Output(state.metadata.currentTerm)
         }
     }
 
@@ -188,7 +187,7 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
             val votes = locked.withLock(REQUEST_VOTE_OPERATION) { state ->
                 state.transitionToCandidate()
                 try {
-                    remotes.requestVote(state.getMetadata(), state.getLog())
+                    remotes.requestVote(state.metadata, state.log)
                 } catch (e: ReplyTermInvariantException) {
                     state.transitionToFollower(e.remoteTerm)
                     throw e
@@ -199,12 +198,12 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
             // voting for itself.
             locked.withLock(REQUEST_VOTE_OPERATION) { state ->
                 val total = 1 + votes.map { if (it) 1 else 0 }.sum()
-                if (total > remotes.size() / 2) {
+                if (total > remotes.size / 2) {
                     logger.info("Node has been elected as leader")
                     state.transitionToLeader()
                 } else {
                     logger.info("Node is transitioning to follower due to not enough votes")
-                    state.transitionToFollower(state.getCurrentTerm())
+                    state.transitionToFollower(state.metadata.currentTerm)
                 }
             }
         }

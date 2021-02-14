@@ -49,9 +49,9 @@ class LocalNodeState(val nodeId: String, private val unsafeState: UnsafeLocalNod
 
 class UnsafeLocalNodeState(
     private val config: NodeConfig,
-    private val metadata: Metadata = Metadata(config.nodeId),
-    private val log: ReplicatedLog = SegmentedLog(config),
-    private val stateMachine: ReplicatedStateMachine = SimpleStateMachine(config.nodeId)
+    val metadata: Metadata = Metadata(config.nodeId),
+    val log: ReplicatedLog = SegmentedLog(config),
+    val stateMachine: ReplicatedStateMachine = SimpleStateMachine(config.nodeId)
 ) {
 
     private val logger: NodeLogger = NodeLogger.from(config.nodeId, UnsafeLocalNodeState::class)
@@ -81,20 +81,9 @@ class UnsafeLocalNodeState(
         log.close()
     }
 
-    fun getLog(): ReplicatedLog = log
-
-    fun getMetadata(): Metadata = metadata
-
-    fun getCommitIndex(): Long = metadata.getCommitIndex()
-
-    fun getCurrentLeaderId(): String? = metadata.getLeaderId()
-
-    fun getCurrentTerm(): Long = metadata.getCurrentTerm()
-
-    fun getCurrentMode(): Metadata.NodeMode = metadata.getMode()
-
     fun ensureValidLeader(leaderId: String, leaderTerm: Long) {
-        val currentTerm = getCurrentTerm()
+        val currentTerm = metadata.currentTerm
+        val currentLeaderId = metadata.leaderId
         if (currentTerm > leaderTerm) {
             // Check whether the node that thinks it is the leader really has a term greater than the
             // term known by this node. In this case, reject the request and let the issuer of the request
@@ -107,15 +96,15 @@ class UnsafeLocalNodeState(
             refreshLeaderInformation(leaderId, leaderTerm)
         } else if (!metadata.matchesLeaderId(leaderId)) {
             // Force caller node to step down by incrementing the term.
-            logger.info("Multiple leaders detected: leaderId=[{}], otherId=[{}]", getCurrentLeaderId(), leaderId)
+            logger.info("Multiple leaders detected: leaderId=[{}], otherId=[{}]", currentLeaderId, leaderId)
             transitionToFollower(currentTerm + 1)
-            throw LeaderMismatchException(getCurrentLeaderId(), currentTerm + 1, log.getLastItemIndex())
+            throw LeaderMismatchException(currentLeaderId, currentTerm + 1, log.getLastItemIndex())
         }
     }
 
     fun ensureValidCandidate(candidateId: String, candidateTerm: Long, lastLogIndex: Long, lastLogTerm: Long) {
         // Check whether the candidate node has a term greater than the term known by this node.
-        val currentTerm = getCurrentTerm()
+        val currentTerm = metadata.currentTerm
         if (currentTerm > candidateTerm) {
             logger.info("Term mismatch: currentTerm=[{}] and candidateTerm=[{}]", currentTerm, candidateTerm)
             throw RequestTermInvariantException(currentTerm, candidateTerm, log.getLastItemIndex())
@@ -142,12 +131,12 @@ class UnsafeLocalNodeState(
 
     fun commitLogItems(leaderCommitIndex: Long) {
         // If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
-        var commitIndex = metadata.getCommitIndex()
+        var commitIndex = metadata.commitIndex
         if (leaderCommitIndex > commitIndex) {
             commitIndex = min(leaderCommitIndex, log.getLastItemIndex())
         }
         // If commitIndex > lastApplied, increment lastApplied, apply log[lastApplied] to state machine.
-        val lastAppliedLogIndex = metadata.getLastAppliedLogIndex()
+        val lastAppliedLogIndex = metadata.lastAppliedLogIndex
         if (commitIndex > lastAppliedLogIndex) {
             val itemApplyRange = lastAppliedLogIndex..commitIndex
             itemApplyRange.forEach { index ->

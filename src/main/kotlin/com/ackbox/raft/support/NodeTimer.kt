@@ -14,7 +14,7 @@ class NodeTimer(private val config: NodeConfig) {
 
     fun restartElectionTimer(electionCallback: Callback?) {
         stopElectionTimer()
-        val delay = config.getElectionDelay()
+        val delay = config.electionDelay
         logger.debug("Setting up election timer to [{}] ms", delay.toMillis())
         electionTimer = createElectionTimer()
         electionTimer.scheduleAtFixedRate(delay.toMillis(), delay.toMillis()) { safely(electionCallback) }
@@ -22,7 +22,7 @@ class NodeTimer(private val config: NodeConfig) {
 
     fun restartHeartbeatTimer(heartbeatCallback: Callback?) {
         stopHeartbeatTimer()
-        val delay = config.getHeartbeatDelay()
+        val delay = config.heartbeatDelay
         logger.debug("Setting up heartbeat timer to [{}] ms", delay.toMillis())
         heartbeatTimer = createHeartbeatTimer()
         heartbeatTimer.scheduleAtFixedRate(delay.toMillis(), delay.toMillis()) { safely(heartbeatCallback) }

@@ -6,16 +6,15 @@ import com.ackbox.raft.PrivateNodeGrpc
 import com.ackbox.raft.PrivateNodeGrpc.PrivateNodeBlockingStub
 import com.ackbox.raft.VoteReply
 import com.ackbox.raft.VoteRequest
+import com.ackbox.raft.log.ReplicatedLog
+import com.ackbox.raft.log.ReplicatedLog.LogItem
 import com.ackbox.raft.networking.NamedChannel
 import com.ackbox.raft.state.Metadata
 import com.ackbox.raft.state.RemoteNodeState
-import com.ackbox.raft.log.ReplicatedLog
-import com.ackbox.raft.log.ReplicatedLog.LogItem
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.ReplyTermInvariantException
 import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
-import java.lang.IllegalStateException
 import java.time.Clock
 import java.util.concurrent.atomic.AtomicReference
 
@@ -28,7 +27,7 @@ class RemoteNode(localNodeId: String, private val channel: NamedChannel, private
     fun appendItems(metadata: Metadata, log: ReplicatedLog): RemoteNodeState {
         // Update internal representation of the peer node according to the reply. Lock on the
         // state and return a consistent snapshot updated according to the response from the peer.
-        val leaderTerm = metadata.getCurrentTerm()
+        val leaderTerm = metadata.currentTerm
         return remoteState.updateAndGet { state ->
             // Assemble all required log items that need to be replicated to peers in the cluster.
             val previousItem = log.getItem(state.nextLogIndex - 1)!!
@@ -65,7 +64,7 @@ class RemoteNode(localNodeId: String, private val channel: NamedChannel, private
 
     fun requestVote(metadata: Metadata, log: ReplicatedLog): Boolean {
         // Initiate voting procedure with peer node.
-        val candidateTerm = metadata.getCurrentTerm()
+        val candidateTerm = metadata.currentTerm
         val lastItemIndex = log.getLastItemIndex()
         val lastItem = log.getItem(lastItemIndex) ?: throw IllegalStateException("No item found at [$lastItemIndex]")
 
@@ -89,8 +88,8 @@ class RemoteNode(localNodeId: String, private val channel: NamedChannel, private
     private fun createAppendRequest(metadata: Metadata, previousItem: LogItem, items: List<LogItem>): AppendRequest {
         return AppendRequest.newBuilder()
             .setTimestamp(clock.millis())
-            .setLeaderId(metadata.getLeaderId())
-            .setLeaderTerm(metadata.getCurrentTerm())
+            .setLeaderId(metadata.leaderId)
+            .setLeaderTerm(metadata.currentTerm)
             .setPreviousLogIndex(previousItem.index)
             .setPreviousLogTerm(previousItem.term)
             .addAllEntries(items.map { it.toEntry() })

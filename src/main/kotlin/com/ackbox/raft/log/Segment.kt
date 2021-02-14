@@ -11,18 +11,20 @@ import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 import java.util.zip.CRC32
 
-data class Segment(private val firstItemIndex: Long, private val path: Path, private val maxSizeInBytes: Int) {
+data class Segment(val firstItemIndex: Long, private val path: Path, private val maxSizeInBytes: Int) {
 
     private var channel: FileChannel? = null
-    private val items: MutableList<SegmentEntry> = mutableListOf()
-    private var lastItemIndex: Long = firstItemIndex - 1 // Segment is created without any entries.
     private var offsetInBytes: Long = 0
+    private val items: MutableList<SegmentEntry> = mutableListOf()
+
+    /**
+     * Index of last item stored in the segment. Segment is created without any entries.
+     * At first last item index is set to [firstItemIndex - 1]
+     */
+    var lastItemIndex: Long = firstItemIndex - 1
+        private set
 
     fun getFilename(): String = "segment$SEPARATOR$firstItemIndex"
-
-    fun getFirstItemIndex(): Long = firstItemIndex
-
-    fun getItemLogIndex(): Long = lastItemIndex
 
     fun canFit(item: LogItem): Boolean = isOpen() && offsetInBytes + item.getSizeInBytes() <= maxSizeInBytes
 
@@ -125,8 +127,8 @@ data class Segment(private val firstItemIndex: Long, private val path: Path, pri
         val crc = computeCrc(itemData)
         val buffer = ByteBuffer.allocate(HEADER_SIZE_BYTES + itemSizeInBytes)
         // Write header data.
-        buffer.putLong(crc)
         buffer.putInt(itemSizeInBytes)
+        buffer.putLong(crc)
         // Write payload data.
         buffer.put(itemData)
         buffer.flip()

@@ -43,12 +43,12 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
 
     override fun getFirstItemIndex(): Long {
         val firstSegment = segments.firstEntry()?.value
-        return firstSegment?.getFirstItemIndex() ?: UNDEFINED_ID
+        return firstSegment?.firstItemIndex ?: UNDEFINED_ID
     }
 
     override fun getLastItemIndex(): Long {
         val lastSegment = segments.lastEntry()?.value
-        return lastSegment?.getItemLogIndex() ?: UNDEFINED_ID
+        return lastSegment?.lastItemIndex ?: UNDEFINED_ID
     }
 
     override fun getItem(index: Long): LogItem? {
@@ -89,8 +89,8 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
             // the current segment is closed and a new one is created.
             logger.info("Creating a new segment for index=[{}]", item.index)
             closeSegment(lastSegment)
-            val logPath = config.getLogPath()
-            val maxSizeInBytes = config.getMaxLogSegmentSizeInBytes()
+            val logPath = config.logPath
+            val maxSizeInBytes = config.maxLogSegmentSizeInBytes
             segments[item.index] = Segment(item.index, logPath, maxSizeInBytes)
         }
         return segments.lastEntry()!!.value.open()
@@ -112,7 +112,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
 
     private fun closeSegment(segment: Segment?) {
         try {
-            logger.info("Closed segment for at [{}::{}]", segment?.getFirstItemIndex(), segment?.getItemLogIndex())
+            logger.info("Closed segment for at [{}::{}]", segment?.firstItemIndex, segment?.lastItemIndex)
             segment?.close()
         } catch (e: Exception) {
             logger.error("Error while closing segment [{}]", segment?.getFilename())
@@ -120,13 +120,13 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
     }
 
     private fun loadSegments() {
-        logger.info("Loading segments from [{}]", config.getLogPath())
-        Files.createDirectories(config.getLogPath())
-        Files.walk(config.getLogPath()).asSequence()
+        logger.info("Loading segments from [{}]", config.logPath)
+        Files.createDirectories(config.logPath)
+        Files.walk(config.logPath).asSequence()
             .filter(Files::isRegularFile)
             .map { path -> Segment.getFirstIndexFromFilename(path.fileName.toString()) }
-            .map { index -> Segment(index, config.getLogPath(), config.getMaxLogSegmentSizeInBytes()) }
+            .map { index -> Segment(index, config.logPath, config.maxLogSegmentSizeInBytes) }
             .onEach { segment -> segment.load() }
-            .forEach { segment -> segments[segment.getFirstItemIndex()] = segment }
+            .forEach { segment -> segments[segment.firstItemIndex] = segment }
     }
 }

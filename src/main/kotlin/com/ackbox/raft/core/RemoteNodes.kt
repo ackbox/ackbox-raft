@@ -19,7 +19,7 @@ class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>, 
     private val remotes: Map<String, RemoteNode> =
         channels.map { it.id to RemoteNode(config.nodeId, it, clock) }.toMap()
 
-    fun size(): Int = remotes.size
+    val size: Int get() = remotes.size
 
     fun appendItems(metadata: Metadata, log: ReplicatedLog): List<RemoteNodeState> {
         return runBlocking(Dispatchers.IO) {
@@ -38,13 +38,13 @@ class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>, 
     }
 
     private suspend fun <T : Any> callAsync(call: () -> T): Deferred<T?> = coroutineScope {
-        async { withTimeoutOrNull(config.getRemoteRpcTimeout().toMillis()) {  call.invoke() } }
+        async { withTimeoutOrNull(config.remoteRpcTimeoutDuration.toMillis()) { call.invoke() } }
     }
 
     companion object {
 
         fun fromConfig(config: NodeConfig, networking: NodeNetworking): RemoteNodes {
-            return RemoteNodes(config, networking.getChannels(), config.clock)
+            return RemoteNodes(config, networking.channels, config.clock)
         }
     }
 }

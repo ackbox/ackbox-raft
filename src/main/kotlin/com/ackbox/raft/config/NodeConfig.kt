@@ -34,10 +34,11 @@ data class NodeConfig(
     val clock: Clock = Clock.systemUTC(),
 
     /**
-     * Maximum wait time for responses from remote nodes when performing RPC requests.
-     * It defaults to [REMOTE_TIMEOUT].
+     * By default, the node's log is divided by segments. The size of these segments is configurable.
+     * This parameter sets the size (in bytes) of these segments.
+     * It defaults to [LOG_SEGMENT_SIZE_IN_BYTES].
      */
-    private val remoteRpcTimeout: Duration = REMOTE_TIMEOUT,
+    val maxLogSegmentSizeInBytes: Int = LOG_SEGMENT_SIZE_IN_BYTES,
 
     /**
      * Base path to the folder where the log should be stored.
@@ -46,11 +47,10 @@ data class NodeConfig(
     private val logBaseFolder: String = LOG_BASE_FOLDER,
 
     /**
-     * By default, the node's log is divided by segments. The size of these segments is configurable.
-     * This parameter sets the size (in bytes) of these segments.
-     * It defaults to [LOG_SEGMENT_SIZE_IN_BYTES].
+     * Maximum wait time for responses from remote nodes when performing RPC requests.
+     * It defaults to [REMOTE_TIMEOUT].
      */
-    private val maxLogSegmentSizeInBytes: Int = LOG_SEGMENT_SIZE_IN_BYTES,
+    private val remoteRpcTimeout: Duration = REMOTE_TIMEOUT,
 
     /**
      * The election timeout is randomly chosen from minimum and maximum values. This parameter
@@ -76,31 +76,24 @@ data class NodeConfig(
     /**
      * Return log path for this node on the file system.
      */
-    fun getLogPath(): Path = Paths.get(logBaseFolder, nodeId)
+    val logPath: Path get() = Paths.get(logBaseFolder, nodeId)
 
     /**
      * Return maximum wait time for responses from remote nodes when performing RPC requests.
      */
-    fun getRemoteRpcTimeout(): Duration = remoteRpcTimeout
-
-    /**
-     * Return maximum size of log's segments (in bytes) on the file system.
-     */
-    fun getMaxLogSegmentSizeInBytes(): Int = maxLogSegmentSizeInBytes
+    val remoteRpcTimeoutDuration: Duration get() = remoteRpcTimeout
 
     /**
      * Compute a random value in the range [electionDelayRangeMs] for the election timeout of the node.
      */
-    fun getElectionDelay(): Duration {
-        return Duration.ofMillis(Randoms.between(electionDelayRangeMs.first, electionDelayRangeMs.second))
-    }
+    val electionDelay: Duration
+        get() = Duration.ofMillis(Randoms.between(electionDelayRangeMs.first, electionDelayRangeMs.second))
 
     /**
      * Return the heartbeat period/delay for this node.
      */
-    fun getHeartbeatDelay(): Duration {
-        return Duration.ofMillis(electionDelayRangeMs.first / heartbeatDelayRatio)
-    }
+    val heartbeatDelay: Duration
+        get() = Duration.ofMillis(electionDelayRangeMs.first / heartbeatDelayRatio)
 
     companion object {
 

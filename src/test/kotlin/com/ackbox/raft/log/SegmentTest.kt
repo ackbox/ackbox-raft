@@ -61,7 +61,7 @@ internal class SegmentTest {
         segment.append(firstItem)
         segment.close()
 
-        assertEquals(firstItem.index, segment.getFirstItemIndex())
+        assertEquals(firstItem.index, segment.firstItemIndex)
         assertItemStorage(firstItem, segment)
         assertThrows<IllegalStateException> { segment.get(outOfLowerBoundItem.index) }
         assertThrows<IllegalStateException> { segment.get(outOfUpperBoundItem.index) }
@@ -74,11 +74,11 @@ internal class SegmentTest {
         val segment = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).load().open()
         assertSegmentInitialState(firstIndex, segment)
 
-        assertEquals(firstIndex, segment.getFirstItemIndex())
-        assertEquals(firstIndex - 1, segment.getItemLogIndex()) // Since it's empty.
+        assertEquals(firstIndex, segment.firstItemIndex)
+        assertEquals(firstIndex - 1, segment.lastItemIndex) // Since it's empty.
         segment.append(item)
 
-        assertEquals(firstIndex, segment.getFirstItemIndex())
+        assertEquals(firstIndex, segment.firstItemIndex)
         assertItemStorage(item, segment)
         segment.close()
     }
@@ -151,12 +151,12 @@ internal class SegmentTest {
     }
 
     private fun assertSegmentInitialState(firstIndex: Long, segment: Segment) {
-        assertEquals(firstIndex, segment.getFirstItemIndex())
-        assertEquals(firstIndex, segment.getItemLogIndex() + 1)
+        assertEquals(firstIndex, segment.firstItemIndex)
+        assertEquals(firstIndex, segment.lastItemIndex + 1)
     }
 
     private fun assertItemStorage(item: ReplicatedLog.LogItem, segment: Segment) {
-        assertEquals(item.index, segment.getItemLogIndex())
+        assertEquals(item.index, segment.lastItemIndex)
         assertEquals(item, segment.get(item.index))
     }
 
