@@ -36,7 +36,7 @@ interface NodeAddress {
  */
 data class NodeNetAddress(override val nodeId: String, val host: String, val port: Int) : NodeAddress {
 
-    private val logger = NodeLogger.from(nodeId, NodeNetworking::class)
+    private val logger: NodeLogger = NodeLogger.from(nodeId, NodeNetworking::class)
 
     override fun toServer(vararg api: BindableService): Server {
         logger.info("Creating server on port [{}]@[{}]", port, nodeId)

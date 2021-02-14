@@ -3,11 +3,12 @@ plugins {
     id 'com.google.protobuf' version '0.8.14'
 }
 
-group 'org.example'
-version '1.0-SNAPSHOT'
+group 'com.ackbox'
+version '1.0'
 
 repositories {
     mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 
 def grpcVersion = '1.35.0'
@@ -16,17 +17,27 @@ def protocVersion = '3.12.0'
 def kotlinCoroutinesVersion = '1.4.2'
 def slf4jVersion = '1.7.30'
 def logbackVersion = '1.2.3'
+def guavaVersion = '30.1-jre'
+def junitVersion = '5.4.2'
+def ackboxKrandomsVersion = '4cbc1d5303'
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinCoroutinesVersion"
     implementation "io.grpc:grpc-kotlin-stub:$grpcKotlinVersion"
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "org.slf4j:slf4j-api:$slf4jVersion"
     implementation "ch.qos.logback:logback-classic:$logbackVersion"
+    implementation "com.google.guava:guava:$guavaVersion"
 
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+
+    testImplementation "com.github.ackbox:ackbox-kotlin-randoms:$ackboxKrandomsVersion"
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junitVersion}"
+    testImplementation "org.junit.jupiter:junit-jupiter-params:${junitVersion}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitVersion}"
 }
 
 protobuf {
@@ -52,3 +63,10 @@ sourceSets {
         }
     }
 }
+
+test {
+    useJUnitPlatform()
+}
+
+compileKotlin { kotlinOptions.jvmTarget = "1.8" }
+compileTestKotlin { kotlinOptions.jvmTarget = "1.8" }

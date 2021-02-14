@@ -7,7 +7,7 @@ import com.ackbox.raft.SetReply
 import com.ackbox.raft.SetRequest
 import com.ackbox.raft.core.LeaderNode.Get
 import com.ackbox.raft.core.LeaderNode.Set
-import com.ackbox.raft.state.ReplicatedLog
+import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NotLeaderException
@@ -22,12 +22,12 @@ import java.time.Clock
  */
 class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : PublicNodeCoroutineImplBase() {
 
-    private val logger = NodeLogger.from(node.nodeId, ExternalNodeApi::class)
+    private val logger: NodeLogger = NodeLogger.from(node.nodeId, ExternalNodeApi::class)
 
     override suspend fun set(request: SetRequest): SetReply {
         logger.debug("Received SET request [{}]", request)
         return try {
-            val input = Set.Input(listOf(ByteBuffer.wrap(request.entry.toByteArray())))
+            val input = Set.Input(listOf(request.entry.toByteArray()))
             val output = node.setItem(input)
             createSuccessSetReply(output.leaderId, output.itemSqn)
         } catch (e: NotLeaderException) {
@@ -36,6 +36,9 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
         } catch (e: CommitIndexMismatchException) {
             logger.warn("Commit index mismatch for SET request", e)
             createFailureSetReply(e.leaderId, SetReply.Status.COMMIT_ERROR)
+        } catch (e: Exception) {
+            logger.error("Unable to complete request due unknown error", e)
+            createFailureSetReply(null, SetReply.Status.UNRECOGNIZED)
         }
     }
 
@@ -48,6 +51,9 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
         } catch (e: NotLeaderException) {
             logger.warn("Received GET request while not leader", e.knownLeaderId, e)
             createFailureGetReply(e.knownLeaderId, GetReply.Status.NOT_LEADER)
+        } catch (e: Exception) {
+            logger.error("Unable to complete request due unknown error", e)
+            createFailureGetReply(null, GetReply.Status.UNRECOGNIZED)
         }
     }
 

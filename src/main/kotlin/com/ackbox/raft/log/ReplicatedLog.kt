@@ -1,16 +1,31 @@
-package com.ackbox.raft.state
+package com.ackbox.raft.log
 
-import com.ackbox.raft.core.UNDEFINED_ID
-import com.ackbox.raft.support.NodeLogger
 import org.slf4j.LoggerFactory
-import java.nio.ByteBuffer
 
 /**
  * Interface for Raft's replicated log.
  */
 interface ReplicatedLog {
 
-    data class LogItem(val index: Long, val term: Long, val value: ByteBuffer)
+    /**
+     * Restore log from persistent storage.
+     */
+    fun open()
+
+    /**
+     * Safely close any used resources.
+     */
+    fun close()
+
+    /**
+     * Describe state of log for troubleshooting purposes.
+     */
+    fun describe()
+
+    /**
+     * Index of lowest log entry added to the log (initialized to 0, increases monotonically).
+     */
+    fun getFirstItemIndex(): Long
 
     /**
      * Index of highest log entry added to the log (initialized to 0, increases monotonically).
@@ -25,7 +40,7 @@ interface ReplicatedLog {
     /**
      * Append log entries received by leader (first index is 1).
      */
-    fun appendItems(toAppend: List<LogItem>)
+    fun appendItems(items: List<LogItem>)
 
     /**
      * Check whether the log contains an entry at [externalIndex] matching [externalTerm].
@@ -72,31 +87,30 @@ interface ReplicatedLog {
 
         private val LOG = LoggerFactory.getLogger(ReplicatedLog::class.java)
     }
-}
 
-class InMemoryReplicatedLog(nodeId: String) : ReplicatedLog {
+    data class LogItem(val index: Long, val term: Long, val value: ByteArray) {
 
-    private val logger = NodeLogger.from(nodeId, InMemoryReplicatedLog::class)
-    private var lastLogIndex: Long = UNDEFINED_ID
-    private val items: MutableMap<Long, ReplicatedLog.LogItem> = mutableMapOf()
+        fun getSizeInBytes(): Int = 2 * Long.SIZE_BYTES + value.size
 
-    init {
-        // Ensure log has marker item to avoid testing for indexes that do not exist.
-        items[UNDEFINED_ID] = ReplicatedLog.LogItem(UNDEFINED_ID, UNDEFINED_ID, ByteBuffer.allocate(0))
-    }
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+            other as LogItem
+            if (index != other.index) return false
+            if (term != other.term) return false
+            if (!value.contentEquals(other.value)) return false
+            return true
+        }
 
-    override fun getLastItemIndex(): Long = lastLogIndex
+        override fun hashCode(): Int {
+            var result = index.hashCode()
+            result = 31 * result + term.hashCode()
+            result = 31 * result + value.contentHashCode()
+            return result
+        }
 
-    override fun getItem(index: Long): ReplicatedLog.LogItem? = items[index]
-
-    override fun appendItems(toAppend: List<ReplicatedLog.LogItem>) {
-        logger.info("Appending [{}] entries to the log", toAppend.size)
-        toAppend.forEach { item ->
-            if (getItem(item.index)?.term != item.term) {
-                // TODO: truncate the log items at [index - 1].
-            }
-            items[item.index] = item
-            lastLogIndex = item.index
+        override fun toString(): String {
+            return "${LogItem::class.simpleName}(index=$index, term=$term, size=${value.size}"
         }
     }
 }

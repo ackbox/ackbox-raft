@@ -20,3 +20,6 @@ out/*
 # NodeJS stuff
 node_modules/
 build/
+
+# Application data stuff
+data/

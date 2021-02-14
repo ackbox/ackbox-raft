@@ -4,56 +4,59 @@ import com.ackbox.raft.core.UNDEFINED_ID
 import com.ackbox.raft.networking.NodeNetworking
 import com.ackbox.raft.support.NodeLogger
 
-class Metadata(
-    /**
-     * Unique identifier for the current node.
-     */
-    val nodeId: String,
-
+/**
+ * Class defining basic metadata of the algorithm.
+ * @param nodeId Unique identifier for the current node.
+ */
+class Metadata(val nodeId: String) {
     /**
      * Latest term server has seen (initialized to 0 on first boot, increases monotonically).
      */
-    private var currentTerm: Long = UNDEFINED_ID,
-
-    /**
-     * CandidateId that received vote in current term (or null if none).
-     */
-    private var votedFor: String? = null,
+    var currentTerm: Long = UNDEFINED_ID
+        private set
 
     /**
      * NodeId that is said to be the leader in current term (or null if none).
      */
-    private var leaderId: String? = null,
+    var leaderId: String? = null
+        private set
 
     /**
      * Index of highest log entry known to be committed (initialized to 0, increases monotonically).
      */
-    private var commitIndex: Long = UNDEFINED_ID,
+    var commitIndex: Long = UNDEFINED_ID
+        private set
 
     /**
      * Index of highest log entry applied to state machine (initialized to 0, increases monotonically)
      */
-    private var lastAppliedLogIndex: Long = UNDEFINED_ID,
+    var lastAppliedLogIndex: Long = UNDEFINED_ID
+        private set
 
     /**
      * Current operation mode of the node in the term.
      */
-    private var mode: NodeMode = NodeMode.FOLLOWER
-) {
+    var mode: NodeMode = NodeMode.FOLLOWER
+        private set
+
+    /**
+     * CandidateId that received vote in current term (or null if none).
+     */
+    private var votedFor: String? = null
 
     private val logger = NodeLogger.from(nodeId, NodeNetworking::class)
 
     enum class NodeMode { FOLLOWER, CANDIDATE, LEADER }
 
-    fun getCurrentTerm(): Long = currentTerm
+//    fun getCurrentTerm(): Long = currentTerm
 
-    fun getLeaderId(): String? = leaderId
+//    fun getLeaderId(): String? = leaderId
 
-    fun getCommitIndex(): Long = commitIndex
+//    fun getCommitIndex(): Long = commitIndex
 
-    fun getLastAppliedLogIndex(): Long = lastAppliedLogIndex
+//    fun getLastAppliedLogIndex(): Long = lastAppliedLogIndex
 
-    fun getMode(): NodeMode = mode
+//    fun getMode(): NodeMode = mode
 
     fun canAcceptLeader(candidateId: String): Boolean {
         return votedFor == null || votedFor == candidateId

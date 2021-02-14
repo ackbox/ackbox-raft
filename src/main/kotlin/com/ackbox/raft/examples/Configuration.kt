@@ -33,6 +33,7 @@ class LoopNode(private val config: NodeConfig) {
     fun run() {
         val node1 = Raft.fromConfig(config)
         scheduleSendEntries(config)
+        node1.describeState()
         node1.start().autoStop().join()
     }
 
@@ -40,6 +41,7 @@ class LoopNode(private val config: NodeConfig) {
         GlobalScope.launch {
             delay(COOLDOWN.toMillis())
             while (isActive) {
+                println("Sending SET request")
                 val request = createRequest()
                 val reply = api.runCatching { set(request) }
                 if (config.nodeId != reply.getOrNull()?.leaderId) {
@@ -59,7 +61,7 @@ class LoopNode(private val config: NodeConfig) {
 
     companion object {
 
-        private val COOLDOWN = Duration.ofMinutes(1)
+        private val COOLDOWN = Duration.ofSeconds(15)
         private val DELAY = Duration.ofSeconds(2)
     }
 }

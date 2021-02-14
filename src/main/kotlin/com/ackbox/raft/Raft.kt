@@ -57,6 +57,10 @@ class Raft(private val node: LocalNode, private val networking: NodeNetworking, 
         }
     }
 
+    fun describeState() {
+        node.describeState()
+    }
+
     companion object {
 
         private val LOG = LoggerFactory.getLogger(Raft::class.java)

@@ -1,6 +1,6 @@
 package com.ackbox.raft.core
 
-import com.ackbox.raft.state.ReplicatedLog
+import com.ackbox.raft.log.ReplicatedLog
 
 /**
  * Interface for nodes acting as replicas in the cluster.

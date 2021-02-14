@@ -3,25 +3,27 @@ package com.ackbox.raft.core
 import com.ackbox.raft.AppendReply
 import com.ackbox.raft.AppendRequest
 import com.ackbox.raft.PrivateNodeGrpc
+import com.ackbox.raft.PrivateNodeGrpc.PrivateNodeBlockingStub
 import com.ackbox.raft.VoteReply
 import com.ackbox.raft.VoteRequest
 import com.ackbox.raft.networking.NamedChannel
 import com.ackbox.raft.state.Metadata
 import com.ackbox.raft.state.RemoteNodeState
-import com.ackbox.raft.state.ReplicatedLog
-import com.ackbox.raft.state.ReplicatedLog.LogItem
+import com.ackbox.raft.log.ReplicatedLog
+import com.ackbox.raft.log.ReplicatedLog.LogItem
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.ReplyTermInvariantException
 import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
+import java.lang.IllegalStateException
 import java.time.Clock
 import java.util.concurrent.atomic.AtomicReference
 
 class RemoteNode(localNodeId: String, private val channel: NamedChannel, private val clock: Clock) {
 
-    private val logger = NodeLogger.from(localNodeId, RemoteNode::class)
-    private val remoteClient = PrivateNodeGrpc.newBlockingStub(channel)
-    private val remoteState = AtomicReference(RemoteNodeState())
+    private val logger: NodeLogger = NodeLogger.from(localNodeId, RemoteNode::class)
+    private val remoteClient: PrivateNodeBlockingStub = PrivateNodeGrpc.newBlockingStub(channel)
+    private val remoteState: AtomicReference<RemoteNodeState> = AtomicReference(RemoteNodeState())
 
     fun appendItems(metadata: Metadata, log: ReplicatedLog): RemoteNodeState {
         // Update internal representation of the peer node according to the reply. Lock on the
@@ -65,7 +67,7 @@ class RemoteNode(localNodeId: String, private val channel: NamedChannel, private
         // Initiate voting procedure with peer node.
         val candidateTerm = metadata.getCurrentTerm()
         val lastItemIndex = log.getLastItemIndex()
-        val lastItem = log.getItem(lastItemIndex)!!
+        val lastItem = log.getItem(lastItemIndex) ?: throw IllegalStateException("No item found at [$lastItemIndex]")
 
         // Send vote request to peer node.
         val reply = try {

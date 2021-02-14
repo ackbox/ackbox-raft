@@ -6,13 +6,12 @@ import com.ackbox.raft.AppendRequest
 import com.ackbox.raft.PrivateNodeGrpcKt.PrivateNodeCoroutineImplBase
 import com.ackbox.raft.VoteReply
 import com.ackbox.raft.VoteRequest
-import com.ackbox.raft.state.ReplicatedLog
+import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.support.LeaderMismatchException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.ReplicaStateMismatchException
 import com.ackbox.raft.support.RequestTermInvariantException
 import com.ackbox.raft.support.VoteNotGrantedException
-import java.nio.ByteBuffer
 import java.time.Clock
 
 /**
@@ -20,7 +19,7 @@ import java.time.Clock
  */
 class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) : PrivateNodeCoroutineImplBase() {
 
-    private val logger = NodeLogger.from(node.nodeId, InternalNodeApi::class)
+    private val logger: NodeLogger = NodeLogger.from(node.nodeId, InternalNodeApi::class)
 
     override suspend fun append(request: AppendRequest): AppendReply {
         logger.debug("Received append request [{}]", request)
@@ -44,6 +43,9 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         } catch (e: ReplicaStateMismatchException) {
             logger.warn("Unable to complete request due log state mismatch", e)
             createFailureAppendReply(e.term, e.lastLogIndex, Status.LOG_STATE_MISMATCH)
+        } catch (e: Exception) {
+            logger.error("Unable to complete request due unknown error", e)
+            createFailureAppendReply(request.leaderTerm, request.previousLogIndex, Status.UNRECOGNIZED)
         }
     }
 
@@ -64,6 +66,9 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         } catch (e: VoteNotGrantedException) {
             logger.warn("Unable to vote for candidate", e)
             createFailureVoteReply(e.term)
+        } catch (e: Exception) {
+            logger.error("Unable to complete request due unknown error", e)
+            createFailureVoteReply(request.candidateTerm)
         }
     }
 
@@ -102,6 +107,6 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
     }
 
     private fun AppendRequest.Entry.toLogItem(): ReplicatedLog.LogItem {
-        return ReplicatedLog.LogItem(index, term, ByteBuffer.wrap(toByteArray()))
+        return ReplicatedLog.LogItem(index, term, entry.toByteArray())
     }
 }

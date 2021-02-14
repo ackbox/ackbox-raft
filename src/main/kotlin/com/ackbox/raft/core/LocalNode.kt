@@ -8,7 +8,7 @@ import com.ackbox.raft.core.ReplicaNode.Vote
 import com.ackbox.raft.state.Callback
 import com.ackbox.raft.state.LocalNodeState
 import com.ackbox.raft.state.Metadata
-import com.ackbox.raft.state.ReplicatedLog.LogItem
+import com.ackbox.raft.log.ReplicatedLog.LogItem
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NotLeaderException
@@ -25,9 +25,9 @@ import java.nio.ByteBuffer
  */
 class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteNodes) : LeaderNode, ReplicaNode {
 
-    private val logger = NodeLogger.from(locked.nodeId, LocalNode::class)
+    private val logger: NodeLogger = NodeLogger.from(locked.nodeId, LocalNode::class)
 
-    override val nodeId = locked.nodeId
+    override val nodeId: String = locked.nodeId
 
     fun start() {
         val electionCallback = createElectionCallback()
@@ -37,6 +37,12 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
 
     fun stop() {
         locked.withLock(STOP_NODE_OPERATION) { state -> state.stop() }
+    }
+
+    fun describeState() {
+        locked.withLock(DESCRIBE_STATE_OPERATION) { state ->
+            state.getLog().describe()
+        }
     }
 
     override fun setItem(input: Set.Input): Set.Output {
@@ -216,7 +222,7 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
         }
     }
 
-    private fun convertToLogItems(currentTerm: Long, lastItemIndex: Long, data: List<ByteBuffer>): List<LogItem> {
+    private fun convertToLogItems(currentTerm: Long, lastItemIndex: Long, data: List<ByteArray>): List<LogItem> {
         var entryIndex = lastItemIndex + 1
         return data.map { LogItem(entryIndex++, currentTerm, it) }
     }

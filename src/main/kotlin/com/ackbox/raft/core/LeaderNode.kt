@@ -1,6 +1,6 @@
 package com.ackbox.raft.core
 
-import com.ackbox.raft.state.ReplicatedLog
+import com.ackbox.raft.log.ReplicatedLog
 import java.nio.ByteBuffer
 
 /**
@@ -14,7 +14,7 @@ interface LeaderNode {
     val nodeId: String
 
     object Set {
-        data class Input(val data: List<ByteBuffer>)
+        data class Input(val data: List<ByteArray>)
         data class Output(val leaderId: String?, val itemSqn: Long)
     }
 

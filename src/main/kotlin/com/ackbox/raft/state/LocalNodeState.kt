@@ -1,13 +1,18 @@
 package com.ackbox.raft.state
 
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.state.ReplicatedLog.LogItem
+import com.ackbox.raft.log.ReplicatedLog
+import com.ackbox.raft.log.ReplicatedLog.LogItem
+import com.ackbox.raft.log.SegmentedLog
+import com.ackbox.raft.statemachine.ReplicatedStateMachine
+import com.ackbox.raft.statemachine.SimpleStateMachine
 import com.ackbox.raft.support.LeaderMismatchException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NodeTimer
 import com.ackbox.raft.support.RequestTermInvariantException
 import com.ackbox.raft.support.VoteNotGrantedException
 import java.util.UUID
+import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.math.min
@@ -21,8 +26,8 @@ typealias Callback = () -> Unit
  */
 class LocalNodeState(val nodeId: String, private val unsafeState: UnsafeLocalNodeState) {
 
-    private val logger = NodeLogger.from(nodeId, LocalNodeState::class)
-    private val lock = ReentrantLock()
+    private val logger: NodeLogger = NodeLogger.from(nodeId, LocalNodeState::class)
+    private val lock: Lock = ReentrantLock()
 
     fun <T : Any> withLock(operationName: String, function: (UnsafeLocalNodeState) -> T): T {
         val operationId = UUID.randomUUID().toString()
@@ -45,17 +50,22 @@ class LocalNodeState(val nodeId: String, private val unsafeState: UnsafeLocalNod
 class UnsafeLocalNodeState(
     private val config: NodeConfig,
     private val metadata: Metadata = Metadata(config.nodeId),
-    private val log: ReplicatedLog = InMemoryReplicatedLog(config.nodeId),
-    private val stateMachine: ReplicatedStateMachine = InMemoryReplicatedStateMachine(config.nodeId)
+    private val log: ReplicatedLog = SegmentedLog(config),
+    private val stateMachine: ReplicatedStateMachine = SimpleStateMachine(config.nodeId)
 ) {
 
-    private val logger = NodeLogger.from(config.nodeId, UnsafeLocalNodeState::class)
-    private val timer = NodeTimer(config)
+    private val logger: NodeLogger = NodeLogger.from(config.nodeId, UnsafeLocalNodeState::class)
+    private val timer: NodeTimer = NodeTimer(config)
 
     private var electionCallback: Callback? = null
     private var heartbeatCallback: Callback? = null
 
     fun start(electionCallback: Callback, heartbeatCallback: Callback) {
+        logger.info("Loading state from persistent storage")
+        log.open()
+        val lastLogItem = log.getItem(log.getLastItemIndex())
+        lastLogItem?.let { metadata.updateAsFollower(it.term) }
+
         logger.info("Starting state timers")
         this.electionCallback = electionCallback
         this.heartbeatCallback = heartbeatCallback
@@ -66,6 +76,9 @@ class UnsafeLocalNodeState(
         logger.info("Stopping state timers")
         timer.stopElectionTimer()
         timer.stopHeartbeatTimer()
+
+        logger.info("Saving state from persistent storage")
+        log.close()
     }
 
     fun getLog(): ReplicatedLog = log

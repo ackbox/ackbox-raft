@@ -30,7 +30,7 @@ class NodeLogger(private val nodeId: String, private val logger: Logger) : Logge
     override fun error(format: String?, arg1: Any?, arg2: Any?) = logger.error("${prefix()} $format", arg1, arg2)
     override fun error(format: String?, vararg arguments: Any?) = logger.error("${prefix()} $format", *arguments)
 
-    private fun prefix() = "[node=$nodeId]"
+    private fun prefix(): String = "[node=$nodeId]"
 
     companion object {
 

@@ -9,8 +9,8 @@ import java.util.concurrent.TimeUnit
 
 class NodeNetworking(private val config: NodeConfig) {
 
-    private val logger = NodeLogger.from(config.nodeId, NodeNetworking::class)
-    private val channels: List<NamedChannel> = config.targets.map { it.toChannel() }
+    private val logger: NodeLogger = NodeLogger.from(config.nodeId, NodeNetworking::class)
+    private val channels: List<NamedChannel> = config.remotes.map { it.toChannel() }
     private var server: Server? = null
 
     fun getChannels(): List<NamedChannel> = channels
