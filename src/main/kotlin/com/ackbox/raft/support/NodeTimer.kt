@@ -11,6 +11,7 @@ class NodeTimer(private val config: NodeConfig) {
     private val logger: NodeLogger = NodeLogger.from(config.nodeId, NodeTimer::class)
     private var electionTimer: Timer = createElectionTimer()
     private var heartbeatTimer: Timer = createHeartbeatTimer()
+    private var snapshotTimer: Timer = createSnapshotTimer()
 
     fun restartElectionTimer(electionCallback: Callback?) {
         stopElectionTimer()
@@ -28,6 +29,20 @@ class NodeTimer(private val config: NodeConfig) {
         heartbeatTimer.scheduleAtFixedRate(delay.toMillis(), delay.toMillis()) { safely(heartbeatCallback) }
     }
 
+    fun restartSnapshotTimer(snapshotCallback: Callback?) {
+        stopSnapshotTimer()
+        val delay = config.snapshotDelay
+        logger.debug("Setting up snapshot timer to [{}] minutes", delay.toMinutes())
+        snapshotTimer = createSnapshotTimer()
+        snapshotTimer.scheduleAtFixedRate(delay.toMillis(), delay.toMillis()) { safely(snapshotCallback) }
+    }
+
+    fun stopAll() {
+        stopElectionTimer()
+        stopHeartbeatTimer()
+        stopSnapshotTimer()
+    }
+
     fun stopElectionTimer() {
         electionTimer.cancel()
         electionTimer.purge()
@@ -38,12 +53,21 @@ class NodeTimer(private val config: NodeConfig) {
         heartbeatTimer.purge()
     }
 
+    private fun stopSnapshotTimer() {
+        snapshotTimer.cancel()
+        snapshotTimer.purge()
+    }
+
     private fun createElectionTimer(): Timer {
         return Timer("ElectionTimer::${config.nodeId}")
     }
 
     private fun createHeartbeatTimer(): Timer {
         return Timer("HeartbeatTimer::${config.nodeId}")
+    }
+
+    private fun createSnapshotTimer(): Timer {
+        return Timer("SnapshotTimer::${config.nodeId}")
     }
 
     private fun safely(callback: Callback?) {

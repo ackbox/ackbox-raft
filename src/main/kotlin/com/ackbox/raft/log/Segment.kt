@@ -3,7 +3,6 @@ package com.ackbox.raft.log
 import com.ackbox.raft.log.LogItemSerializer.HEADER_CRC_SIZE_BYTES
 import com.ackbox.raft.log.LogItemSerializer.HEADER_ITEM_SIZE_BYTES
 import com.ackbox.raft.log.LogItemSerializer.HEADER_SIZE_BYTES
-import com.ackbox.raft.log.ReplicatedLog.LogItem
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
@@ -27,6 +26,8 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
     fun getFilename(): String = "segment$SEPARATOR$firstItemIndex"
 
     fun canFit(item: LogItem): Boolean = isOpen() && offsetInBytes + item.getSizeInBytes() <= maxSizeInBytes
+
+    fun isEmpty(): Boolean = lastItemIndex - firstItemIndex < 0
 
     fun append(item: LogItem) {
         ensureSegmentOpen()
@@ -76,13 +77,19 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
     }
 
     fun close(): Segment {
-        channel?.close()
-        channel = null
+        if (isOpen()) {
+            channel?.close()
+            channel = null
+        }
         return this
     }
 
     fun describe(): String {
         return items.joinToString("") { item -> "\nSegment item [${item}]" }
+    }
+
+    fun delete() {
+        createPath().toFile().delete()
     }
 
     override fun toString(): String {
@@ -99,12 +106,14 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
 
     private fun createChannel(): FileChannel {
         return FileChannel.open(
-            Paths.get(path.toString(), getFilename()),
+            createPath(),
             StandardOpenOption.CREATE,
             StandardOpenOption.READ,
             StandardOpenOption.WRITE
         )
     }
+
+    private fun createPath(): Path = Paths.get(path.toString(), getFilename())
 
     private fun isOpen(): Boolean = channel != null
 

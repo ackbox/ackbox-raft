@@ -2,34 +2,38 @@ package com.ackbox.raft.log
 
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.core.UNDEFINED_ID
-import com.ackbox.raft.log.ReplicatedLog.LogItem
 import com.ackbox.raft.support.NodeLogger
-import com.google.common.primitives.Longs
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.TreeMap
+import javax.annotation.concurrent.NotThreadSafe
 import kotlin.streams.asSequence
 
 /**
  * Implementation of [ReplicatedLog] where node's log is represented by contiguous segments.
  * The current implementation ensures that log items are stored in persisted storage (file system).
  */
+@NotThreadSafe
 class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
 
     private val logger: NodeLogger = NodeLogger.from(config.nodeId, SegmentedLog::class)
     private val segments: TreeMap<Long, Segment> = TreeMap<Long, Segment>()
 
     override fun open() {
-        loadSegments()
-        if (segments.isEmpty()) {
-            // Add marker log item to avoid null checks in multiple parts of the code.
-            val item = LogItem(UNDEFINED_ID, UNDEFINED_ID, Longs.toByteArray(UNDEFINED_ID))
-            ensureSegmentFor(item).append(item)
-        }
+        logger.info("Opening segments from [{}]", config.logPath)
+        Files.createDirectories(config.logPath)
+        Files.walk(config.logPath).asSequence()
+            .filter<Path>(Files::isRegularFile)
+            .map { path -> Segment.getFirstIndexFromFilename(path.fileName.toString()) }
+            .map { index -> Segment(index, config.logPath, config.maxLogSegmentSizeInBytes) }
+            .onEach { segment -> segment.load() }
+            .forEach { segment -> segments[segment.firstItemIndex] = segment }
         segments.lastEntry()?.value?.open()
     }
 
     override fun close() {
-        segments.lastEntry()?.value?.close()
+        logger.info("Closing segments from [{}]", config.logPath)
+        segments.values.forEach { segment -> closeSegment(segment) }
     }
 
     override fun describe() {
@@ -71,7 +75,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
                 // condition. Once the new leader is confirmed, it will force all followers
                 // to replicate its log. Here we ensure that the follower is able to correctly
                 // truncate the log at the divergence point before appending the entry.
-                logger.warn("Truncating log at index=[{}] due to term mismatch", item.index)
+                logger.warn("Truncating log at index [{}] due to term mismatch", item.index)
                 val segment = getSegmentFor(item.index)!!
                 segment.truncateAt(item.index)
                 segment.append(item)
@@ -81,13 +85,41 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         }
     }
 
+    override fun clear() {
+        logger.warn("Deleting all log entries from memory and file system")
+        segments.values.forEach { segment ->
+            try {
+                segment.delete()
+            } catch (e: Exception) {
+                logger.warn("Error while deleting segment [{}]", segment, e)
+            }
+        }
+        segments.clear()
+    }
+
+    override fun truncateBefore(index: Long) {
+        logger.info("Truncating logs at index [{}]", index)
+        val segment = getSegmentFor(index) ?: return
+        val toRemove = segments.keys.filter { segmentIndex -> segmentIndex < segment.firstItemIndex }
+        toRemove.forEach { segmentIndex ->
+            val segmentToRemove = segments.remove(segmentIndex)
+            closeSegment(segmentToRemove)
+            segmentToRemove?.delete()
+        }
+    }
+
+    override fun truncateAfter(index: Long) {
+        val segment = getSegmentFor(index)
+        segment?.truncateAt(index)
+    }
+
     private fun ensureSegmentFor(item: LogItem): Segment {
         val lastSegment = segments.lastEntry()?.value
         if (lastSegment?.canFit(item) != true) {
             // Last segment is either null or cannot fit the item. Whenever the segment
             // cannot store the new item or the segment is null (potentially on startup)
             // the current segment is closed and a new one is created.
-            logger.info("Creating a new segment for index=[{}]", item.index)
+            logger.info("Creating a new segment for index [{}]", item.index)
             closeSegment(lastSegment)
             val logPath = config.logPath
             val maxSizeInBytes = config.maxLogSegmentSizeInBytes
@@ -102,11 +134,11 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         if (index < firstLogIndex || index > lastLogIndex) {
             // In this case, an entry was requested but its index is not present
             // in any of the segments in this log.
-            logger.warn("Item index=[{}] outside log boundaries: [{}]::[{}]", index, firstLogIndex, lastLogIndex)
+            logger.info("Item index=[{}] outside log boundaries: [{}]::[{}]", index, firstLogIndex, lastLogIndex)
             return null
         }
         val segment = segments.floorEntry(index)
-        logger.debug("Found item at [{}]::[{}]", segment?.value, index)
+        logger.debug("Found item at segment=[{}] and index=[{}]", segment?.value, index)
         return segment?.value
     }
 
@@ -117,16 +149,5 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         } catch (e: Exception) {
             logger.error("Error while closing segment [{}]", segment?.getFilename())
         }
-    }
-
-    private fun loadSegments() {
-        logger.info("Loading segments from [{}]", config.logPath)
-        Files.createDirectories(config.logPath)
-        Files.walk(config.logPath).asSequence()
-            .filter(Files::isRegularFile)
-            .map { path -> Segment.getFirstIndexFromFilename(path.fileName.toString()) }
-            .map { index -> Segment(index, config.logPath, config.maxLogSegmentSizeInBytes) }
-            .onEach { segment -> segment.load() }
-            .forEach { segment -> segments[segment.firstItemIndex] = segment }
     }
 }

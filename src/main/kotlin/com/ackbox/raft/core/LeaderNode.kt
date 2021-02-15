@@ -1,7 +1,6 @@
 package com.ackbox.raft.core
 
-import com.ackbox.raft.log.ReplicatedLog
-import java.nio.ByteBuffer
+import com.ackbox.raft.log.LogItem
 
 /**
  * Interface for nodes acting as leader in the cluster.
@@ -25,7 +24,7 @@ interface LeaderNode {
 
     object Get {
         data class Input(val itemSqn: Long)
-        data class Output(val leaderId: String?, val item: ReplicatedLog.LogItem?)
+        data class Output(val leaderId: String?, val item: LogItem?)
     }
 
     /**

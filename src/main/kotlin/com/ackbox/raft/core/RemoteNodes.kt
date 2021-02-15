@@ -6,39 +6,38 @@ import com.ackbox.raft.networking.NamedChannel
 import com.ackbox.raft.networking.NodeNetworking
 import com.ackbox.raft.state.Metadata
 import com.ackbox.raft.state.RemoteNodeState
-import kotlinx.coroutines.Deferred
+import com.ackbox.raft.statemachine.Snapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Clock
 
 class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>, clock: Clock) {
 
-    private val remotes: Map<String, RemoteNode> =
-        channels.map { it.id to RemoteNode(config.nodeId, it, clock) }.toMap()
+    private val remotes: Map<String, RemoteNode> = createRemotes(channels, clock)
 
     val size: Int get() = remotes.size
 
-    fun appendItems(metadata: Metadata, log: ReplicatedLog): List<RemoteNodeState> {
-        return runBlocking(Dispatchers.IO) {
-            remotes.map { (_, remote) ->
-                callAsync { remote.appendItems(metadata, log) }
-            }.mapNotNull { it.await() }
-        }
+    fun appendItems(metadata: Metadata, log: ReplicatedLog, snapshot: Snapshot): List<RemoteNodeState> {
+        return broadcastInParallel { remote -> remote.sendAppend(metadata, log, snapshot) }
     }
 
     fun requestVote(metadata: Metadata, log: ReplicatedLog): List<Boolean> {
+        return broadcastInParallel { remote -> remote.sendVote(metadata, log) }
+    }
+
+    fun resetState(nextLogIndex: Long) {
+        remotes.values.forEach { remote -> remote.resetState(nextLogIndex) }
+    }
+
+    private fun <T : Any> broadcastInParallel(consumer: suspend (RemoteNode) -> T): List<T> {
         return runBlocking(Dispatchers.IO) {
-            remotes.map { (_, remote) ->
-                callAsync { remote.requestVote(metadata, log) }
-            }.mapNotNull { it.await() }
+            remotes.values.map { remote -> async { consumer(remote) } }.map { it.await() }
         }
     }
 
-    private suspend fun <T : Any> callAsync(call: () -> T): Deferred<T?> = coroutineScope {
-        async { withTimeoutOrNull(config.remoteRpcTimeoutDuration.toMillis()) { call.invoke() } }
+    private fun createRemotes(channels: List<NamedChannel>, clock: Clock): Map<String, RemoteNode> {
+        return channels.map { it.id to RemoteNode(config, it, clock) }.toMap()
     }
 
     companion object {

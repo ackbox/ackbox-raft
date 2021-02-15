@@ -44,6 +44,12 @@ class CommitIndexMismatchException(val leaderId: String?, desiredCommitIndex: Lo
     NonRetryableException("Unable to reach consensus on commit index - desired=[$desiredCommitIndex] and actual=[$actualCommitIndex]")
 
 /**
+ * Exception for the case where the node was unable to acquire the lock in order to safely modify its state.
+ * It is safe for requests to be retried upon reception of this exception.
+ */
+class LockNotAcquiredException : RetryableException("Unable to acquire state lock")
+
+/**
  * Exception for transient failures. Callers can retry upon receiving this exception.
  */
 abstract class RetryableException(message: String?, cause: Throwable? = null) : Exception(message, cause)

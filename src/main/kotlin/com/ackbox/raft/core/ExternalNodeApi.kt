@@ -1,18 +1,18 @@
 package com.ackbox.raft.core
 
-import com.ackbox.raft.GetReply
-import com.ackbox.raft.GetRequest
-import com.ackbox.raft.PublicNodeGrpcKt.PublicNodeCoroutineImplBase
-import com.ackbox.raft.SetReply
-import com.ackbox.raft.SetRequest
+import com.ackbox.raft.api.GetReply
+import com.ackbox.raft.api.GetRequest
+import com.ackbox.raft.api.PublicNodeGrpcKt.PublicNodeCoroutineImplBase
+import com.ackbox.raft.api.SetReply
+import com.ackbox.raft.api.SetRequest
 import com.ackbox.raft.core.LeaderNode.Get
 import com.ackbox.raft.core.LeaderNode.Set
-import com.ackbox.raft.log.ReplicatedLog
+import com.ackbox.raft.log.LogItem
 import com.ackbox.raft.support.CommitIndexMismatchException
+import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NotLeaderException
 import com.google.protobuf.ByteString
-import java.nio.ByteBuffer
 import java.time.Clock
 
 /**
@@ -36,6 +36,9 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
         } catch (e: CommitIndexMismatchException) {
             logger.warn("Commit index mismatch for SET request", e)
             createFailureSetReply(e.leaderId, SetReply.Status.COMMIT_ERROR)
+        } catch (e: LockNotAcquiredException) {
+            logger.warn("Unable to complete request since node is busy", e)
+            createFailureSetReply(null, SetReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
             createFailureSetReply(null, SetReply.Status.UNRECOGNIZED)
@@ -51,6 +54,9 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
         } catch (e: NotLeaderException) {
             logger.warn("Received GET request while not leader", e.knownLeaderId, e)
             createFailureGetReply(e.knownLeaderId, GetReply.Status.NOT_LEADER)
+        } catch (e: LockNotAcquiredException) {
+            logger.warn("Unable to complete request since node is busy", e)
+            createFailureGetReply(null, GetReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
             createFailureGetReply(null, GetReply.Status.UNRECOGNIZED)
@@ -75,7 +81,7 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             .build()
     }
 
-    private fun createSuccessGetReply(leaderId: String?, item: ReplicatedLog.LogItem?): GetReply {
+    private fun createSuccessGetReply(leaderId: String?, item: LogItem?): GetReply {
         return GetReply.newBuilder()
             .setTimestamp(clock.millis())
             .setLeaderId(leaderId)

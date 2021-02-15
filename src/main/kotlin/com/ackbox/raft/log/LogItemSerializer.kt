@@ -8,7 +8,7 @@ object LogItemSerializer {
     const val HEADER_CRC_SIZE_BYTES = Long.SIZE_BYTES
     const val HEADER_SIZE_BYTES = HEADER_ITEM_SIZE_BYTES + HEADER_CRC_SIZE_BYTES
 
-    fun toByteBuffer(item: ReplicatedLog.LogItem): ByteBuffer {
+    fun toByteBuffer(item: LogItem): ByteBuffer {
         val buffer = ByteBuffer.allocate(item.getSizeInBytes())
         buffer.putLong(item.index)
         buffer.putLong(item.term)
@@ -17,11 +17,11 @@ object LogItemSerializer {
         return buffer
     }
 
-    fun fromByteBuffer(buffer: ByteBuffer): ReplicatedLog.LogItem {
+    fun fromByteBuffer(buffer: ByteBuffer): LogItem {
         val index = buffer.long
         val term = buffer.long
         val value = ByteArray(buffer.remaining())
         buffer.get(value)
-        return ReplicatedLog.LogItem(index, term, value)
+        return LogItem(index, term, value)
     }
 }

@@ -60,6 +60,7 @@ sourceSets {
             srcDirs 'build/generated/source/proto/main/grpc'
             srcDirs 'build/generated/source/proto/main/grpckt'
             srcDirs 'build/generated/source/proto/main/java'
+            srcDirs 'examples'
         }
     }
 }

@@ -1,12 +1,14 @@
 package com.ackbox.raft.config
 
+import com.ackbox.raft.core.DATA_BASE_FOLDER
 import com.ackbox.raft.core.HEARTBEAT_DELAY_RATIO
-import com.ackbox.raft.core.LOG_BASE_FOLDER
 import com.ackbox.raft.core.LOG_SEGMENT_SIZE_IN_BYTES
 import com.ackbox.raft.core.MAX_ELECTION_TIMER_MS
 import com.ackbox.raft.core.MIN_ELECTION_TIMER_MS
 import com.ackbox.raft.core.REMOTE_TIMEOUT
 import com.ackbox.raft.core.Randoms
+import com.ackbox.raft.core.SNAPSHOT_DELAY
+import com.ackbox.raft.core.STATE_LOCK_WAIT_TIMEOUT
 import com.ackbox.raft.networking.NodeAddress
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -41,16 +43,16 @@ data class NodeConfig(
     val maxLogSegmentSizeInBytes: Int = LOG_SEGMENT_SIZE_IN_BYTES,
 
     /**
-     * Base path to the folder where the log should be stored.
-     * It defaults to [LOG_BASE_FOLDER].
+     * Maximum amount of time that requests will be waiting to acquire the state lock for this node.
+     * It defaults to [STATE_LOCK_WAIT_TIMEOUT].
      */
-    private val logBaseFolder: String = LOG_BASE_FOLDER,
+    val maxStateLockWaitTimeout: Duration = STATE_LOCK_WAIT_TIMEOUT,
 
     /**
-     * Maximum wait time for responses from remote nodes when performing RPC requests.
-     * It defaults to [REMOTE_TIMEOUT].
+     * The snapshot delay defines how frequently a node will take a snapshot if its state and trim its log.
+     * It defaults to [SNAPSHOT_DELAY].
      */
-    private val remoteRpcTimeout: Duration = REMOTE_TIMEOUT,
+    val snapshotDelay: Duration = SNAPSHOT_DELAY,
 
     /**
      * The election timeout is randomly chosen from minimum and maximum values. This parameter
@@ -66,6 +68,18 @@ data class NodeConfig(
      * It defaults to [HEARTBEAT_DELAY_RATIO].
      */
     private val heartbeatDelayRatio: Int = HEARTBEAT_DELAY_RATIO,
+
+    /**
+     * Base path to the folder where the all node data should be stored.
+     * It defaults to [DATA_BASE_FOLDER].
+     */
+    private val dataBaseFolder: String = DATA_BASE_FOLDER,
+
+    /**
+     * Maximum wait time for responses from remote nodes when performing RPC requests.
+     * It defaults to [REMOTE_TIMEOUT].
+     */
+    private val remoteRpcTimeout: Duration = REMOTE_TIMEOUT
 ) {
 
     /**
@@ -76,7 +90,12 @@ data class NodeConfig(
     /**
      * Return log path for this node on the file system.
      */
-    val logPath: Path get() = Paths.get(logBaseFolder, nodeId)
+    val logPath: Path get() = Paths.get(dataBaseFolder, nodeId, "log")
+
+    /**
+     * Return snapshot path for this node on the file system.
+     */
+    val snapshotPath: Path get() = Paths.get(dataBaseFolder, nodeId, "snapshot")
 
     /**
      * Return maximum wait time for responses from remote nodes when performing RPC requests.

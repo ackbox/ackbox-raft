@@ -1,8 +1,8 @@
-package com.ackbox.raft.examples
+package simple
 
-import com.ackbox.raft.PublicNodeGrpc
 import com.ackbox.raft.Raft
-import com.ackbox.raft.SetRequest
+import com.ackbox.raft.api.PublicNodeGrpc
+import com.ackbox.raft.api.SetRequest
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.networking.NodeNetAddress
 import com.google.protobuf.ByteString

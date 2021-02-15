@@ -3,11 +3,13 @@ package com.ackbox.raft.state
 import com.ackbox.raft.core.UNDEFINED_ID
 import com.ackbox.raft.networking.NodeNetworking
 import com.ackbox.raft.support.NodeLogger
+import javax.annotation.concurrent.NotThreadSafe
 
 /**
  * Class defining basic metadata of the algorithm.
  * @param nodeId Unique identifier for the current node.
  */
+@NotThreadSafe
 class Metadata(val nodeId: String) {
     /**
      * Latest term server has seen (initialized to 0 on first boot, increases monotonically).
@@ -25,12 +27,6 @@ class Metadata(val nodeId: String) {
      * Index of highest log entry known to be committed (initialized to 0, increases monotonically).
      */
     var commitIndex: Long = UNDEFINED_ID
-        private set
-
-    /**
-     * Index of highest log entry applied to state machine (initialized to 0, increases monotonically)
-     */
-    var lastAppliedLogIndex: Long = UNDEFINED_ID
         private set
 
     /**
@@ -65,9 +61,8 @@ class Metadata(val nodeId: String) {
         votedFor = null
     }
 
-    fun updateLastAppliedLogIndex(newCommitIndex: Long, index: Long) {
+    fun updateCommitIndex(newCommitIndex: Long) {
         commitIndex = newCommitIndex
-        lastAppliedLogIndex = index
     }
 
     fun updateAsFollower(operationTerm: Long) {

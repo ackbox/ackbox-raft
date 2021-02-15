@@ -155,13 +155,13 @@ internal class SegmentTest {
         assertEquals(firstIndex, segment.lastItemIndex + 1)
     }
 
-    private fun assertItemStorage(item: ReplicatedLog.LogItem, segment: Segment) {
+    private fun assertItemStorage(item: LogItem, segment: Segment) {
         assertEquals(item.index, segment.lastItemIndex)
         assertEquals(item, segment.get(item.index))
     }
 
-    private fun createLogItem(index: Long): ReplicatedLog.LogItem {
-        return ReplicatedLog.LogItem(index, TERM, DATA_8_BYTES)
+    private fun createLogItem(index: Long): LogItem {
+        return LogItem(index, TERM, DATA_8_BYTES)
     }
 
     companion object {

@@ -43,6 +43,23 @@ interface ReplicatedLog {
     fun appendItems(items: List<LogItem>)
 
     /**
+     * Reset log to it's initial state by removing all in-memory and persisted entries.
+     */
+    fun clear()
+
+    /**
+     * Truncate the log at the [index]. This means that all entries before [index] (not including) will be
+     * remove from the log.
+     */
+    fun truncateBefore(index: Long)
+
+    /**
+     * Truncate the log at the [index]. This means that all entries after [index] (not including) will be
+     * remove from the log.
+     */
+    fun truncateAfter(index: Long)
+
+    /**
      * Check whether the log contains an entry at [externalIndex] matching [externalTerm].
      */
     fun containsItem(externalIndex: Long, externalTerm: Long): Boolean {
@@ -86,31 +103,5 @@ interface ReplicatedLog {
     companion object {
 
         private val LOG = LoggerFactory.getLogger(ReplicatedLog::class.java)
-    }
-
-    data class LogItem(val index: Long, val term: Long, val value: ByteArray) {
-
-        fun getSizeInBytes(): Int = 2 * Long.SIZE_BYTES + value.size
-
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
-            other as LogItem
-            if (index != other.index) return false
-            if (term != other.term) return false
-            if (!value.contentEquals(other.value)) return false
-            return true
-        }
-
-        override fun hashCode(): Int {
-            var result = index.hashCode()
-            result = 31 * result + term.hashCode()
-            result = 31 * result + value.contentHashCode()
-            return result
-        }
-
-        override fun toString(): String {
-            return "${LogItem::class.simpleName}(index=$index, term=$term, size=${value.size}"
-        }
     }
 }
