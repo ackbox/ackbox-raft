@@ -19,6 +19,7 @@ def slf4jVersion = '1.7.30'
 def logbackVersion = '1.2.3'
 def guavaVersion = '30.1-jre'
 def junitVersion = '5.4.2'
+def kotlinMockitoVersion = '2.2.0'
 def ackboxKrandomsVersion = '4cbc1d5303'
 
 dependencies {
@@ -28,6 +29,7 @@ dependencies {
     implementation "io.grpc:grpc-kotlin-stub:$grpcKotlinVersion"
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-core:${grpcVersion}"
     implementation "org.slf4j:slf4j-api:$slf4jVersion"
     implementation "ch.qos.logback:logback-classic:$logbackVersion"
     implementation "com.google.guava:guava:$guavaVersion"
@@ -35,8 +37,10 @@ dependencies {
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "com.github.ackbox:ackbox-kotlin-randoms:$ackboxKrandomsVersion"
+    testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:$kotlinMockitoVersion"
     testImplementation "org.junit.jupiter:junit-jupiter-api:${junitVersion}"
     testImplementation "org.junit.jupiter:junit-jupiter-params:${junitVersion}"
+
     testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitVersion}"
 }
 

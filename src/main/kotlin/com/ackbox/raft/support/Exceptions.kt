@@ -52,9 +52,9 @@ class LockNotAcquiredException : RetryableException("Unable to acquire state loc
 /**
  * Exception for transient failures. Callers can retry upon receiving this exception.
  */
-abstract class RetryableException(message: String?, cause: Throwable? = null) : Exception(message, cause)
+abstract class RetryableException(message: String?, cause: Throwable? = null) : RuntimeException(message, cause)
 
 /**
  * Exception for terminal failures. Callers should NOT retry upon receiving this exception.
  */
-abstract class NonRetryableException(message: String?, cause: Throwable? = null) : Exception(message, cause)
+abstract class NonRetryableException(message: String?, cause: Throwable? = null) : RuntimeException(message, cause)

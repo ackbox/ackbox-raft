@@ -3,6 +3,7 @@ package com.ackbox.raft.log
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.core.UNDEFINED_ID
 import com.ackbox.raft.support.NodeLogger
+import com.google.common.annotations.VisibleForTesting
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.TreeMap
@@ -33,7 +34,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
 
     override fun close() {
         logger.info("Closing segments from [{}]", config.logPath)
-        segments.values.forEach { segment -> closeSegment(segment) }
+        segments.values.forEach { segment -> segment.safelyClose() }
     }
 
     override fun describe() {
@@ -76,9 +77,8 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
                 // to replicate its log. Here we ensure that the follower is able to correctly
                 // truncate the log at the divergence point before appending the entry.
                 logger.warn("Truncating log at index [{}] due to term mismatch", item.index)
-                val segment = getSegmentFor(item.index)!!
-                segment.truncateAt(item.index)
-                segment.append(item)
+                truncateAfterInclusive(item.index)
+                ensureSegmentFor(item).append(item)
             } else {
                 logger.info("Ignoring item since it already exists in log: item=[{}]", item)
             }
@@ -87,31 +87,33 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
 
     override fun clear() {
         logger.warn("Deleting all log entries from memory and file system")
-        segments.values.forEach { segment ->
-            try {
-                segment.delete()
-            } catch (e: Exception) {
-                logger.warn("Error while deleting segment [{}]", segment, e)
-            }
-        }
+        segments.values.forEach { segment -> segment.safelyDelete() }
         segments.clear()
     }
 
-    override fun truncateBefore(index: Long) {
-        logger.info("Truncating logs at index [{}]", index)
-        val segment = getSegmentFor(index) ?: return
-        val toRemove = segments.keys.filter { segmentIndex -> segmentIndex < segment.firstItemIndex }
+    override fun truncateBeforeNonInclusive(index: Long) {
+        logger.info("Truncating logs before index [{}]", index)
+        val toRemove = segments.navigableKeySet().headSet(index).toSet()
         toRemove.forEach { segmentIndex ->
             val segmentToRemove = segments.remove(segmentIndex)
-            closeSegment(segmentToRemove)
-            segmentToRemove?.delete()
+            segmentToRemove?.safelyClose()
+            segmentToRemove?.safelyDelete()
         }
     }
 
-    override fun truncateAfter(index: Long) {
-        val segment = getSegmentFor(index)
-        segment?.truncateAt(index)
+    override fun truncateAfterInclusive(index: Long) {
+        logger.info("Truncating logs after index [{}]", index)
+        val toRemove = segments.navigableKeySet().tailSet(index).toSet()
+        toRemove.forEach { segmentIndex ->
+            val segmentToRemove = segments.remove(segmentIndex)
+            segmentToRemove?.safelyClose()
+            segmentToRemove?.safelyDelete()
+        }
+        getSegmentFor(index )?.open()?.truncateAt(index)
     }
+
+    @VisibleForTesting
+    fun getSegmentSize(): Int = segments.size
 
     private fun ensureSegmentFor(item: LogItem): Segment {
         val lastSegment = segments.lastEntry()?.value
@@ -120,7 +122,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
             // cannot store the new item or the segment is null (potentially on startup)
             // the current segment is closed and a new one is created.
             logger.info("Creating a new segment for index [{}]", item.index)
-            closeSegment(lastSegment)
+            lastSegment?.safelyClose()
             val logPath = config.logPath
             val maxSizeInBytes = config.maxLogSegmentSizeInBytes
             segments[item.index] = Segment(item.index, logPath, maxSizeInBytes)
@@ -142,12 +144,21 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         return segment?.value
     }
 
-    private fun closeSegment(segment: Segment?) {
+    private fun Segment.safelyClose() {
         try {
-            logger.info("Closed segment for at [{}::{}]", segment?.firstItemIndex, segment?.lastItemIndex)
-            segment?.close()
+            logger.info("Closing segment [{}]", this)
+            close()
         } catch (e: Exception) {
-            logger.error("Error while closing segment [{}]", segment?.getFilename())
+            logger.error("Error while closing segment [{}]", this)
+        }
+    }
+
+    private fun Segment.safelyDelete() {
+        try {
+            logger.info("Deleting segment for [{}]", this)
+            delete()
+        } catch (e: Exception) {
+            logger.error("Error while deleting segment [{}]", this)
         }
     }
 }

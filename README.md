@@ -24,10 +24,20 @@ if (stateDrift > config.getMaxAllowedStateDrift()) {
 ```
 
 ```kotlin
-if (segments.isEmpty()) {
-    // Add marker log item to avoid null checks in multiple parts of the code.
-    val item = LogItem(UNDEFINED_ID, UNDEFINED_ID, Longs.toByteArray(UNDEFINED_ID))
-    ensureSegmentFor(item).append(item)
+@Test
+fun `should reject get of out-of-bounds log items`() {
+    val config = createConfig(UUID.randomUUID().toString())
+    val segmentedLog = SegmentedLog(config)
+    val firstItemIndex = segmentedLog.getFirstItemIndex()
+    val firstItem = Fixtures.createLogItem(firstItemIndex)
+    val outOfLowerBoundItemIndex = firstItemIndex - INDEX_DIFF
+    val outOfUpperBoundItemIndex = firstItemIndex + INDEX_DIFF
+
+    segmentedLog.use { log ->
+        log.appendItems(listOf(firstItem))
+        assertEquals(firstItem, log.getItem(firstItemIndex))
+        assertThrows<IllegalStateException> { log.getItem(outOfLowerBoundItemIndex) }
+        assertThrows<IllegalStateException> { log.getItem(outOfUpperBoundItemIndex) }
+    }
 }
-segments.lastEntry()?.value?.open()
 ```

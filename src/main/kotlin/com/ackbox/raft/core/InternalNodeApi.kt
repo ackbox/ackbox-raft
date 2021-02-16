@@ -57,7 +57,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             createFailureAppendReply(UNDEFINED_ID, UNDEFINED_ID, AppendReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureAppendReply(request.leaderTerm, request.previousLogIndex, AppendReply.Status.UNRECOGNIZED)
+            createFailureAppendReply(request.leaderTerm, request.previousLogIndex, AppendReply.Status.UNKNOWN)
         }
     }
 
@@ -83,7 +83,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             createFailureVoteReply(UNDEFINED_ID, VoteReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureVoteReply(request.candidateTerm, VoteReply.Status.VOTE_NOT_GRANTED)
+            createFailureVoteReply(request.candidateTerm, VoteReply.Status.UNKNOWN)
         }
     }
 
@@ -116,60 +116,60 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             createFailureSnapshotReply(e.term, SnapshotReply.Status.TERM_MISMATCH)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureSnapshotReply(UNDEFINED_ID, SnapshotReply.Status.UNRECOGNIZED)
+            createFailureSnapshotReply(UNDEFINED_ID, SnapshotReply.Status.UNKNOWN)
         } finally {
             processingSnapshot.set(false)
         }
     }
 
     private fun createSuccessAppendReply(term: Long, lastLogIndex: Long): AppendReply {
-        return AppendReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setCurrentTerm(term)
-            .setLastLogIndex(lastLogIndex)
-            .setStatus(AppendReply.Status.SUCCESS)
-            .build()
+        return AppendReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            this.currentTerm = term
+            this.lastLogIndex = lastLogIndex
+            this.status = AppendReply.Status.SUCCESS
+        }.build()
     }
 
     private fun createFailureAppendReply(term: Long, lastLogIndex: Long, status: AppendReply.Status): AppendReply {
-        return AppendReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setCurrentTerm(term)
-            .setLastLogIndex(lastLogIndex)
-            .setStatus(status)
-            .build()
+        return AppendReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            this.currentTerm = term
+            this.lastLogIndex = lastLogIndex
+            this.status = status
+        }.build()
     }
 
     private fun createSuccessVoteReply(term: Long): VoteReply {
-        return VoteReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setCurrentTerm(term)
-            .setStatus(VoteReply.Status.VOTE_GRANTED)
-            .build()
+        return VoteReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            this.currentTerm = term
+            this.status = VoteReply.Status.VOTE_GRANTED
+        }.build()
     }
 
     private fun createFailureVoteReply(term: Long, status: VoteReply.Status): VoteReply {
-        return VoteReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setCurrentTerm(term)
-            .setStatus(status)
-            .build()
+        return VoteReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            this.currentTerm = term
+            this.status = status
+        }.build()
     }
 
     private fun createSuccessSnapshotReply(term: Long): SnapshotReply {
-        return SnapshotReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setCurrentTerm(term)
-            .setStatus(SnapshotReply.Status.SUCCESS)
-            .build()
+        return SnapshotReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            this.currentTerm = term
+            this.status = SnapshotReply.Status.SUCCESS
+        }.build()
     }
 
     private fun createFailureSnapshotReply(term: Long, status: SnapshotReply.Status): SnapshotReply {
-        return SnapshotReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setCurrentTerm(term)
-            .setStatus(status)
-            .build()
+        return SnapshotReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            this.currentTerm = term
+            this.status = status
+        }.build()
     }
 
     private fun AppendRequest.Entry.toLogItem(): LogItem {

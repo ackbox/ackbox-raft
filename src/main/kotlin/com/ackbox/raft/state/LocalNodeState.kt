@@ -186,7 +186,7 @@ class UnsafeLocalNodeState(
     fun takeSnapshot() {
         val newSnapshot = stateMachine.takeSnapshot()
         val lastAppliedLogIndex = newSnapshot.lastIncludedLogIndex
-        log.truncateBefore(lastAppliedLogIndex)
+        log.truncateBeforeNonInclusive(lastAppliedLogIndex)
 
         // Up until here, the snapshot was in a temporary folder on the file system. If all the
         // previous operations are successful, we promote the snapshot to latest.
@@ -228,7 +228,7 @@ class UnsafeLocalNodeState(
         logger.info("Loading state using snapshot [{}]", snapshot)
         stateMachine.restoreSnapshot(snapshot)
         log.open()
-        log.truncateBefore(snapshot.lastIncludedLogIndex)
+        log.truncateBeforeNonInclusive(snapshot.lastIncludedLogIndex)
         val lastLogItem = log.getItem(log.getLastItemIndex())
         lastLogItem?.let { metadata.updateAsFollower(it.term) }
     }

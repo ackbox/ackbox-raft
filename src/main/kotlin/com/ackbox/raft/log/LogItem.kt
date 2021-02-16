@@ -25,6 +25,6 @@ data class LogItem(val index: Long, val term: Long, val value: ByteArray) {
     }
 
     override fun toString(): String {
-        return "${LogItem::class.simpleName}(index=$index, term=$term, size=${value.size}"
+        return "${LogItem::class.simpleName}(index=$index, term=$term, size=${value.size})"
     }
 }

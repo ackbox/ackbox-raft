@@ -23,8 +23,6 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
     var lastItemIndex: Long = firstItemIndex - 1
         private set
 
-    fun getFilename(): String = "segment$SEPARATOR$firstItemIndex"
-
     fun canFit(item: LogItem): Boolean = isOpen() && offsetInBytes + item.getSizeInBytes() <= maxSizeInBytes
 
     fun isEmpty(): Boolean = lastItemIndex - firstItemIndex < 0
@@ -84,6 +82,8 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
         return this
     }
 
+    fun isOpen(): Boolean = channel != null
+
     fun describe(): String {
         return items.joinToString("") { item -> "\nSegment item [${item}]" }
     }
@@ -98,7 +98,6 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
     }
 
     private fun getEntry(index: Long): SegmentEntry? {
-        check(index <= lastItemIndex) { "Index [$index] must be less or equal to lastIndex=[$lastItemIndex]" }
         check(index >= firstItemIndex) { "Index [$index] must be greater or equal to firstIndex=[$firstItemIndex]" }
         val adjustedIndex = index - firstItemIndex
         return items.getOrNull(adjustedIndex.toInt())
@@ -114,8 +113,6 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
     }
 
     private fun createPath(): Path = Paths.get(path.toString(), getFilename())
-
-    private fun isOpen(): Boolean = channel != null
 
     private fun ensureSegmentOpen() {
         check(isOpen()) { "Segment [${getFilename()}] is not open" }
@@ -161,6 +158,8 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
         }
         return LogItemSerializer.fromByteBuffer(itemDataBuffer)
     }
+
+    private fun getFilename(): String = "segment$SEPARATOR$firstItemIndex"
 
     private data class SegmentEntry(
         /**

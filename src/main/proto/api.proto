@@ -43,12 +43,14 @@ message SetReply {
   // - SUCCESS: leader node was able to append and commit entries.
   // - NOT_LEADER: request was sent to a node that is not the leader.
   // - COMMIT_ERROR: leader had issues committing the entries.
-  // - PROCESSING: if follower is busy processing previous requests.
+  // - PROCESSING: if node is busy processing previous requests.
+  // - UNKNOWN: if mode is failed with unknown reason.
   enum Status {
     SUCCESS = 0;
     NOT_LEADER = 1;
     COMMIT_ERROR = 2;
     PROCESSING = 3;
+    UNKNOWN = 4;
   }
 
   // Response timestamp (wall clock from issuer).
@@ -78,11 +80,13 @@ message GetReply {
   // Possible status for a set request.
   // - SUCCESS: leader node was able retrieve entries.
   // - NOT_LEADER: request was sent to a node that is not the leader.
-  // - PROCESSING: if follower is busy processing previous requests.
+  // - PROCESSING: if node is busy processing previous requests.
+  // - UNKNOWN: if node is failed with unknown reason.
   enum Status {
     SUCCESS = 0;
     NOT_LEADER = 1;
     PROCESSING = 2;
+    UNKNOWN = 3;
   }
 
   // Response timestamp (wall clock from issuer).
@@ -122,10 +126,12 @@ message VoteReply {
   // - VOTE_GRANTED: if node granted the vote to the candidate.
   // - VOTE_NOT_GRANTED: if node did NOT grant the vote to the candidate.
   // - PROCESSING: if follower is busy processing previous requests.
+  // - UNKNOWN: if follower is failed with unknown reason.
   enum Status {
     VOTE_GRANTED = 0;
     VOTE_NOT_GRANTED = 1;
     PROCESSING = 2;
+    UNKNOWN = 3;
   }
 
   // Response timestamp (wall clock from issuer).
@@ -176,12 +182,14 @@ message AppendReply {
   // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster.
   // - TERM_MISMATCH: if follower's term does not agree with issuer of the request.
   // - PROCESSING: if follower is busy processing previous requests.
+  // - UNKNOWN: if follower is failed with unknown reason.
   enum Status {
     SUCCESS = 0;
     LEADER_MISMATCH = 1;
     TERM_MISMATCH = 2;
     LOG_STATE_MISMATCH = 3;
     PROCESSING = 4;
+    UNKNOWN = 5;
   }
   // Response timestamp (wall clock from issuer).
   int64 timestamp = 1;
@@ -224,11 +232,13 @@ message SnapshotReply {
   // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster.
   // - TERM_MISMATCH: if follower's term does not agree with issuer of the request.
   // - PROCESSING: if follower is busy processing previous requests.
+  // - UNKNOWN: if follower is failed with unknown reason.
   enum Status {
     SUCCESS = 0;
     LEADER_MISMATCH = 1;
     TERM_MISMATCH = 2;
     PROCESSING = 3;
+    UNKNOWN = 4;
   }
 
   // Response timestamp (wall clock from issuer).

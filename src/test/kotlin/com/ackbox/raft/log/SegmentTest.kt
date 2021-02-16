@@ -1,11 +1,14 @@
 package com.ackbox.raft.log
 
+import com.ackbox.raft.Fixtures
 import com.ackbox.raft.core.Randoms
+import com.ackbox.raft.use
 import com.ackbox.random.krandom
 import com.google.common.primitives.Longs
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -53,18 +56,16 @@ internal class SegmentTest {
     fun `should reject get of out-of-bounds log items`() {
         val firstIndex = System.nanoTime()
         val firstItem = createLogItem(firstIndex)
-        val outOfLowerBoundItem = createLogItem(firstIndex - INDEX_DIFF)
-        val outOfUpperBoundItem = createLogItem(firstIndex + INDEX_DIFF)
-        val segment = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).open()
-        assertSegmentInitialState(firstIndex, segment)
+        val outOfBoundItem = createLogItem(firstIndex - INDEX_DIFF)
 
-        segment.append(firstItem)
-        segment.close()
+        Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
+            assertSegmentInitialState(firstIndex, segment)
+            segment.append(firstItem)
 
-        assertEquals(firstItem.index, segment.firstItemIndex)
-        assertItemStorage(firstItem, segment)
-        assertThrows<IllegalStateException> { segment.get(outOfLowerBoundItem.index) }
-        assertThrows<IllegalStateException> { segment.get(outOfUpperBoundItem.index) }
+            assertEquals(firstItem.index, segment.firstItemIndex)
+            assertItemStorage(firstItem, segment)
+            assertThrows<IllegalStateException> { segment.get(outOfBoundItem.index) }
+        }
     }
 
     @Test
@@ -88,9 +89,9 @@ internal class SegmentTest {
         val firstIndex = System.nanoTime()
         val items = (0 until Randoms.between(5, 50)).map { offset -> createLogItem(firstIndex + offset) }
 
-        val segment1 = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).open()
-        items.forEach { item -> segment1.append(item) }
-        segment1.close()
+        Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
+            items.forEach { item -> segment.append(item) }
+        }
 
         val segment2 = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).load()
         items.forEach { item -> assertEquals(item, segment2.get(item.index)) }
@@ -104,15 +105,15 @@ internal class SegmentTest {
         val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex + offset) }
         val extraItems = (firstOffset until secondOffset).map { offset -> createLogItem(firstIndex + offset) }
 
-        val segment1 = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).open()
-        items.forEach { item -> segment1.append(item) }
-        segment1.close()
+        Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
+            items.forEach { item -> segment.append(item) }
+        }
 
-        val segment2 = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).load().open()
-        extraItems.forEach { item -> segment2.append(item) }
-        items.forEach { item -> assertEquals(item, segment2.get(item.index)) }
-        extraItems.forEach { item -> assertEquals(item, segment2.get(item.index)) }
-        segment2.close()
+        Segment(firstIndex, baseFolder.toPath(), SIZE_1024).load().use { segment ->
+            extraItems.forEach { item -> segment.append(item) }
+            items.forEach { item -> assertEquals(item, segment.get(item.index)) }
+            extraItems.forEach { item -> assertEquals(item, segment.get(item.index)) }
+        }
     }
 
     @Test
@@ -122,11 +123,11 @@ internal class SegmentTest {
         val item2 = createLogItem(firstIndex + 1)
         val singleItemDataSize = LogItemSerializer.HEADER_SIZE_BYTES + item1.getSizeInBytes()
 
-        val segment = Segment(firstIndex, baseFolder.toPath(), singleItemDataSize).open()
-        assertTrue(segment.canFit(item1))
-        segment.append(item1)
-        assertFalse(segment.canFit(item2))
-        segment.close()
+        Segment(firstIndex, baseFolder.toPath(), singleItemDataSize).use { segment ->
+            assertTrue(segment.canFit(item1))
+            segment.append(item1)
+            assertFalse(segment.canFit(item2))
+        }
     }
 
     @Test
@@ -138,16 +139,44 @@ internal class SegmentTest {
         val tailItems1 = (firstOffset until secondOffset).map { offset -> createLogItem(firstIndex + offset) }
         val tailItems2 = (firstOffset until secondOffset).map { offset -> createLogItem(firstIndex + offset) }
 
-        val segment = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).open()
-        items.forEach { item -> segment.append(item) }
-        tailItems1.forEach { item -> segment.append(item) }
+        Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
+            items.forEach { item -> segment.append(item) }
+            tailItems1.forEach { item -> segment.append(item) }
 
-        val midIndex = tailItems1.first().index
-        segment.truncateAt(midIndex)
-        tailItems2.forEach { item -> segment.append(item) }
+            val midIndex = tailItems1.first().index
+            segment.truncateAt(midIndex)
+            tailItems2.forEach { item -> segment.append(item) }
 
-        (items + tailItems2).forEach { item -> assertEquals(item, segment.get(item.index)) }
-        segment.close()
+            (items + tailItems2).forEach { item -> assertEquals(item, segment.get(item.index)) }
+        }
+    }
+
+    @Test
+    fun `should be able to delete segments`() {
+        val firstIndex = System.nanoTime()
+        val firstOffset = Randoms.between(5, 20)
+        val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex + offset) }
+
+        Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
+            items.forEach { item -> segment.append(item) }
+        }
+
+        val segment2 = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).load()
+        items.forEach { item -> assertEquals(item, segment2.get(item.index)) }
+        segment2.delete()
+
+        val segment3 = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).load()
+        items.forEach { item -> assertNull(segment3.get(item.index)) }
+    }
+
+    @Test
+    fun `should properly expose isEmpty method`() {
+        val firstIndex = System.nanoTime()
+        Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
+            assertTrue(segment.isEmpty())
+            segment.append(createLogItem(firstIndex))
+            assertFalse(segment.isEmpty())
+        }
     }
 
     private fun assertSegmentInitialState(firstIndex: Long, segment: Segment) {
@@ -161,7 +190,7 @@ internal class SegmentTest {
     }
 
     private fun createLogItem(index: Long): LogItem {
-        return LogItem(index, TERM, DATA_8_BYTES)
+        return Fixtures.createLogItem(index, TERM, DATA_8_BYTES)
     }
 
     companion object {

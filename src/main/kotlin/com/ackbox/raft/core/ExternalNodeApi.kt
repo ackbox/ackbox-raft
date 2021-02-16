@@ -41,7 +41,7 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             createFailureSetReply(null, SetReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureSetReply(null, SetReply.Status.UNRECOGNIZED)
+            createFailureSetReply(null, SetReply.Status.UNKNOWN)
         }
     }
 
@@ -59,42 +59,42 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             createFailureGetReply(null, GetReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureGetReply(null, GetReply.Status.UNRECOGNIZED)
+            createFailureGetReply(null, GetReply.Status.UNKNOWN)
         }
     }
 
     private fun createSuccessSetReply(leaderId: String?, sqn: Long): SetReply {
-        return SetReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setSqn(sqn)
-            .setLeaderId(leaderId)
-            .setStatus(SetReply.Status.SUCCESS)
-            .build()
+        return SetReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            leaderId?.let { this.leaderId = it }
+            this.sqn = sqn
+            this.status = SetReply.Status.SUCCESS
+        }.build()
     }
 
     private fun createFailureSetReply(leaderId: String?, status: SetReply.Status): SetReply {
-        return SetReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setSqn(UNDEFINED_ID)
-            .setLeaderId(leaderId)
-            .setStatus(status)
-            .build()
+        return SetReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            leaderId?.let { this.leaderId = it }
+            this.sqn = UNDEFINED_ID
+            this.status = status
+        }.build()
     }
 
     private fun createSuccessGetReply(leaderId: String?, item: LogItem?): GetReply {
-        return GetReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setLeaderId(leaderId)
-            .setEntry(item?.let { ByteString.copyFrom(it.value) })
-            .setStatus(GetReply.Status.SUCCESS)
-            .build()
+        return GetReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            leaderId?.let { this.leaderId = it }
+            this.entry = item?.let { ByteString.copyFrom(it.value) }
+            this.status = GetReply.Status.SUCCESS
+        }.build()
     }
 
     private fun createFailureGetReply(leaderId: String?, status: GetReply.Status): GetReply {
-        return GetReply.newBuilder()
-            .setTimestamp(clock.millis())
-            .setLeaderId(leaderId)
-            .setStatus(status)
-            .build()
+        return GetReply.newBuilder().apply {
+            this.timestamp = clock.millis()
+            leaderId?.let { this.leaderId = it }
+            this.status = status
+        }.build()
     }
 }

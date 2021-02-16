@@ -48,16 +48,16 @@ interface ReplicatedLog {
     fun clear()
 
     /**
-     * Truncate the log at the [index]. This means that all entries before [index] (not including) will be
+     * Truncate the log at the [index]. This means that all entries before [index] (non-inclusive) will be
      * remove from the log.
      */
-    fun truncateBefore(index: Long)
+    fun truncateBeforeNonInclusive(index: Long)
 
     /**
-     * Truncate the log at the [index]. This means that all entries after [index] (not including) will be
+     * Truncate the log at the [index]. This means that all entries after [index] (inclusive) will be
      * remove from the log.
      */
-    fun truncateAfter(index: Long)
+    fun truncateAfterInclusive(index: Long)
 
     /**
      * Check whether the log contains an entry at [externalIndex] matching [externalTerm].
@@ -65,12 +65,12 @@ interface ReplicatedLog {
     fun containsItem(externalIndex: Long, externalTerm: Long): Boolean {
         val lastItemIndex = getLastItemIndex()
         if (externalIndex > lastItemIndex) {
-            LOG.info("Log is not caught up: externalIndex=[{}], internalIndex=[{}]", externalIndex, lastItemIndex)
+            LOG.info("Log is not caught up: externalIndex=[{}] and internalIndex=[{}]", externalIndex, lastItemIndex)
             return false
         }
         val entry = getItem(externalIndex)
         if (entry == null || entry.term != externalTerm) {
-            LOG.info("Log is not caught up: externalTerm=[{}], internalTerm=[{}]", externalTerm, entry?.term)
+            LOG.info("Log is not caught up: externalTerm=[{}] and internalTerm=[{}]", externalTerm, entry?.term)
             return false
         }
         return true
