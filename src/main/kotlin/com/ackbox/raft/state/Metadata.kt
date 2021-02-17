@@ -1,6 +1,5 @@
 package com.ackbox.raft.state
 
-import com.ackbox.raft.core.UNDEFINED_ID
 import com.ackbox.raft.networking.NodeNetworking
 import com.ackbox.raft.support.NodeLogger
 import javax.annotation.concurrent.NotThreadSafe
@@ -11,84 +10,68 @@ import javax.annotation.concurrent.NotThreadSafe
  */
 @NotThreadSafe
 class Metadata(val nodeId: String) {
-    /**
-     * Latest term server has seen (initialized to 0 on first boot, increases monotonically).
-     */
-    var currentTerm: Long = UNDEFINED_ID
+
+    var consensusMetadata: ConsensusMetadata = ConsensusMetadata()
         private set
 
-    /**
-     * NodeId that is said to be the leader in current term (or null if none).
-     */
-    var leaderId: String? = null
+    var commitMetadata: CommitMetadata = CommitMetadata()
         private set
-
-    /**
-     * Index of highest log entry known to be committed (initialized to 0, increases monotonically).
-     */
-    var commitIndex: Long = UNDEFINED_ID
-        private set
-
-    /**
-     * Current operation mode of the node in the term.
-     */
-    var mode: NodeMode = NodeMode.FOLLOWER
-        private set
-
-    /**
-     * CandidateId that received vote in current term (or null if none).
-     */
-    private var votedFor: String? = null
 
     private val logger = NodeLogger.from(nodeId, NodeNetworking::class)
 
     fun canAcceptLeader(candidateId: String): Boolean {
-        return votedFor == null || votedFor == candidateId
+        return consensusMetadata.votedFor == null || consensusMetadata.votedFor == candidateId
     }
 
     fun matchesLeaderId(proposedLeaderId: String): Boolean {
-        return leaderId == null || leaderId == proposedLeaderId
+        return consensusMetadata.leaderId == null || consensusMetadata.leaderId == proposedLeaderId
     }
 
     fun updateVote(candidateId: String) {
         logger.info("Updating vote for candidate=[{}]", candidateId)
-        votedFor = candidateId
+        consensusMetadata = consensusMetadata.copy(votedFor = candidateId)
     }
 
     fun updateLeaderId(proposedLeaderId: String) {
         logger.info("Updating leader to leaderId=[{}]", proposedLeaderId)
-        leaderId = proposedLeaderId
-        votedFor = null
+        consensusMetadata = consensusMetadata.copy(votedFor = null, leaderId = proposedLeaderId)
     }
 
-    fun updateCommitIndex(newCommitIndex: Long) {
-        commitIndex = newCommitIndex
+    fun updateCommitMetadata(appliedLogIndex: Long, appliedLogTerm: Long, commitIndex: Long) {
+        commitMetadata = commitMetadata.copy(
+            lastAppliedLogIndex = appliedLogIndex,
+            lastAppliedLogTerm = appliedLogTerm,
+            commitIndex = commitIndex
+        )
     }
 
     fun updateAsFollower(operationTerm: Long) {
         logger.info("Updating node state as follower with term=[{}]", operationTerm)
-        if (currentTerm < operationTerm) {
+        val currentTerm = if (consensusMetadata.currentTerm < operationTerm) {
             logger.info("Updating term with term=[{}] and resetting votedFor", operationTerm)
-            currentTerm = operationTerm
+            operationTerm
+        } else {
+            consensusMetadata.currentTerm
         }
-        votedFor = null
-        mode = NodeMode.FOLLOWER
+        consensusMetadata = consensusMetadata.copy(votedFor = null, currentTerm = currentTerm, mode = NodeMode.FOLLOWER)
     }
 
     fun updateAsCandidate() {
         logger.info("Updating node state as candidate")
-        currentTerm++
-        leaderId = null
-        votedFor = nodeId
-        mode = NodeMode.CANDIDATE
+        consensusMetadata = consensusMetadata.copy(
+            currentTerm = consensusMetadata.currentTerm + 1,
+            leaderId = null,
+            votedFor = nodeId,
+            mode = NodeMode.CANDIDATE
+        )
     }
 
     fun updateAsLeader() {
         logger.info("Updating node state as leader")
-        leaderId = nodeId
-        votedFor = nodeId
-        mode = NodeMode.LEADER
+        consensusMetadata = consensusMetadata.copy(
+            leaderId = nodeId,
+            votedFor = nodeId,
+            mode = NodeMode.LEADER
+        )
     }
-
-    enum class NodeMode { FOLLOWER, CANDIDATE, LEADER }
 }

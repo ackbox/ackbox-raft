@@ -59,9 +59,6 @@ message SetReply {
   // Leader's unique identifier so follower can redirect clients.
   string leaderId = 2;
 
-  // Sequence number assigned to the entry.
-  int64 sqn = 3;
-
   // Status code for the response.
   Status status = 4;
 }
@@ -72,7 +69,7 @@ message GetRequest {
   int64 timestamp = 1;
 
   // Sequence number assigned to the entry.
-  int64 sqn = 2;
+  string key = 2;
 }
 
 // Get replicated entry response message.

@@ -35,7 +35,7 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
     fun sendAppend(metadata: Metadata, log: ReplicatedLog, snapshot: Snapshot): RemoteNodeState {
         // Update internal representation of the follower node according to the reply. Lock on the
         // state and return a consistent snapshot updated according to the response from the peer.
-        val leaderTerm = metadata.currentTerm
+        val leaderTerm = metadata.consensusMetadata.currentTerm
         return remoteState.updateAndGet { state ->
             // If the follower node needs an entry that is no longer present in the logs of the leader
             // (meaning that the leader trimmed its log beyond [state.nextLogIndex]), the leader will
@@ -91,7 +91,7 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
 
     fun sendVote(metadata: Metadata, log: ReplicatedLog): Boolean {
         // Initiate voting procedure with follower node.
-        val candidateTerm = metadata.currentTerm
+        val candidateTerm = metadata.consensusMetadata.currentTerm
         val lastItem = log.getItem(log.getLastItemIndex())
 
         // Send vote request to follower node.
@@ -158,9 +158,9 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
     ): AppendRequest {
         return AppendRequest.newBuilder()
             .setTimestamp(clock.millis())
-            .setLeaderId(metadata.leaderId)
-            .setLeaderTerm(metadata.currentTerm)
-            .setLeaderCommitIndex(metadata.commitIndex)
+            .setLeaderId(metadata.consensusMetadata.leaderId)
+            .setLeaderTerm(metadata.consensusMetadata.currentTerm)
+            .setLeaderCommitIndex(metadata.commitMetadata.commitIndex)
             .setPreviousLogIndex(previousLogIndex)
             .setPreviousLogTerm(previousLogTerm)
             .addAllEntries(items.map { it.toEntry() })

@@ -1,11 +1,12 @@
 package com.ackbox.raft.state
 
 import com.ackbox.raft.config.NodeConfig
+import com.ackbox.raft.core.UNDEFINED_ID
 import com.ackbox.raft.log.LogItem
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.log.SegmentedLog
+import com.ackbox.raft.statemachine.KeyValueStore
 import com.ackbox.raft.statemachine.ReplicatedStateMachine
-import com.ackbox.raft.statemachine.SimpleStateMachine
 import com.ackbox.raft.statemachine.Snapshot
 import com.ackbox.raft.support.Callback
 import com.ackbox.raft.support.LeaderMismatchException
@@ -14,11 +15,13 @@ import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NodeTimer
 import com.ackbox.raft.support.RequestTermInvariantException
 import com.ackbox.raft.support.VoteNotGrantedException
+import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.NotThreadSafe
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -62,7 +65,7 @@ class LocalNodeState(private val config: NodeConfig, private val unsafeState: Un
 @NotThreadSafe
 class UnsafeLocalNodeState(
     private val config: NodeConfig,
-    private val stateMachine: ReplicatedStateMachine = SimpleStateMachine(config),
+    private val stateMachine: ReplicatedStateMachine = KeyValueStore(config),
     val metadata: Metadata = Metadata(config.nodeId),
     val log: ReplicatedLog = SegmentedLog(config)
 ) {
@@ -94,8 +97,8 @@ class UnsafeLocalNodeState(
     }
 
     fun ensureValidLeader(leaderId: String, leaderTerm: Long) {
-        val currentTerm = metadata.currentTerm
-        val currentLeaderId = metadata.leaderId
+        val currentTerm = metadata.consensusMetadata.currentTerm
+        val currentLeaderId = metadata.consensusMetadata.leaderId
         if (currentTerm > leaderTerm) {
             // Check whether the node that thinks it is the leader really has a term greater than the
             // term known by this node. In this case, reject the request and let the issuer of the request
@@ -116,7 +119,7 @@ class UnsafeLocalNodeState(
 
     fun ensureValidCandidate(candidateId: String, candidateTerm: Long, lastLogIndex: Long, lastLogTerm: Long) {
         // Check whether the candidate node has a term greater than the term known by this node.
-        val currentTerm = metadata.currentTerm
+        val currentTerm = metadata.consensusMetadata.currentTerm
         if (currentTerm > candidateTerm) {
             logger.info("Term mismatch: currentTerm=[{}] and candidateTerm=[{}]", currentTerm, candidateTerm)
             throw RequestTermInvariantException(currentTerm, candidateTerm, log.getLastItemIndex())
@@ -143,25 +146,27 @@ class UnsafeLocalNodeState(
 
     fun commitLogItems(leaderCommitIndex: Long) {
         // If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
-        var commitIndex = metadata.commitIndex
+        val commitMetadata = metadata.commitMetadata
+        var commitIndex = commitMetadata.commitIndex
         if (leaderCommitIndex > commitIndex) {
             commitIndex = min(leaderCommitIndex, log.getLastItemIndex())
         }
         logger.info("Set commitIndex to [{}] from leaderCommitIndex=[{}]", commitIndex, leaderCommitIndex)
         // If commitIndex > lastApplied, increment lastApplied, apply log[lastApplied] to state machine.
-        val lastAppliedLogIndex = stateMachine.getLastAppliedLogIndex()
+        val lastAppliedLogIndex = commitMetadata.lastAppliedLogIndex
         if (commitIndex > lastAppliedLogIndex) {
             val itemApplyRange = lastAppliedLogIndex..commitIndex
             itemApplyRange.forEach { index ->
-                log.getItem(index)?.let { stateMachine.setItem(it) }
+                val item = log.getItem(index) ?: throw IllegalStateException("Corrupted log at index [$index]")
+                stateMachine.setValue(item.value)
                 // Update lastAppliedLogIndex to currently applied item index.
-                metadata.updateCommitIndex(commitIndex)
+                metadata.updateCommitMetadata(item.index, item.term, commitIndex)
             }
         }
     }
 
-    fun getCommittedLogItem(index: Long): LogItem? {
-        return stateMachine.getItem(index)
+    fun getStateValue(key: String): ByteBuffer? {
+        return stateMachine.getValue(key)?.let { ByteBuffer.wrap(it) }
     }
 
     fun restoreSnapshot(newSnapshot: Snapshot) {
@@ -174,8 +179,12 @@ class UnsafeLocalNodeState(
 
         // If no item is found, we replace the state machine's state with the snapshot provided
         // as well as reset the logs so that the leader can properly replicate its own.
-        stateMachine.restoreSnapshot(newSnapshot)
-        metadata.updateCommitIndex(newSnapshot.lastIncludedLogIndex)
+        stateMachine.restoreSnapshot(newSnapshot.dataPath)
+        metadata.updateCommitMetadata(
+            newSnapshot.lastIncludedLogIndex,
+            newSnapshot.lastIncludedLogTerm,
+            newSnapshot.lastIncludedLogIndex
+        )
         log.clear()
 
         // Up until here, the snapshot was in a temporary folder on the file system. If all the
@@ -184,9 +193,10 @@ class UnsafeLocalNodeState(
     }
 
     fun takeSnapshot() {
-        val newSnapshot = stateMachine.takeSnapshot()
-        val lastAppliedLogIndex = newSnapshot.lastIncludedLogIndex
-        log.truncateBeforeNonInclusive(lastAppliedLogIndex)
+        val dataPath = stateMachine.takeSnapshot()
+        val commitMetadata = metadata.commitMetadata
+        val newSnapshot = Snapshot(commitMetadata.lastAppliedLogIndex, commitMetadata.lastAppliedLogTerm, dataPath)
+        log.truncateBeforeNonInclusive(commitMetadata.lastAppliedLogIndex)
 
         // Up until here, the snapshot was in a temporary folder on the file system. If all the
         // previous operations are successful, we promote the snapshot to latest.
@@ -226,10 +236,14 @@ class UnsafeLocalNodeState(
 
     private fun loadState() {
         logger.info("Loading state using snapshot [{}]", snapshot)
-        stateMachine.restoreSnapshot(snapshot)
+        val lastLogItem = log.getItem(log.getLastItemIndex())
+        val index = max(snapshot.lastIncludedLogIndex, lastLogItem?.index ?: UNDEFINED_ID)
+        val term = max(snapshot.lastIncludedLogTerm, lastLogItem?.term ?: UNDEFINED_ID)
+        val commitIndex = snapshot.lastIncludedLogIndex
+        stateMachine.restoreSnapshot(snapshot.dataPath)
         log.open()
         log.truncateBeforeNonInclusive(snapshot.lastIncludedLogIndex)
-        val lastLogItem = log.getItem(log.getLastItemIndex())
-        lastLogItem?.let { metadata.updateAsFollower(it.term) }
+        metadata.updateCommitMetadata(index, term, commitIndex)
+        metadata.updateAsFollower(term)
     }
 }

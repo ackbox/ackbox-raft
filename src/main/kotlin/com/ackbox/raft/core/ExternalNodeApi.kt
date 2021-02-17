@@ -7,12 +7,12 @@ import com.ackbox.raft.api.SetReply
 import com.ackbox.raft.api.SetRequest
 import com.ackbox.raft.core.LeaderNode.Get
 import com.ackbox.raft.core.LeaderNode.Set
-import com.ackbox.raft.log.LogItem
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NotLeaderException
 import com.google.protobuf.ByteString
+import java.nio.ByteBuffer
 import java.time.Clock
 
 /**
@@ -29,7 +29,7 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
         return try {
             val input = Set.Input(listOf(request.entry.toByteArray()))
             val output = node.setItem(input)
-            createSuccessSetReply(output.leaderId, output.itemSqn)
+            createSuccessSetReply(output.leaderId)
         } catch (e: NotLeaderException) {
             logger.warn("Received SET request while not leader", e.knownLeaderId, e)
             createFailureSetReply(e.knownLeaderId, SetReply.Status.NOT_LEADER)
@@ -48,9 +48,9 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
     override suspend fun get(request: GetRequest): GetReply {
         logger.debug("Received GET request [{}]", request)
         return try {
-            val input = Get.Input(request.sqn)
+            val input = Get.Input(request.key)
             val output = node.getItem(input)
-            createSuccessGetReply(output.leaderId, output.item)
+            createSuccessGetReply(output.leaderId, output.data)
         } catch (e: NotLeaderException) {
             logger.warn("Received GET request while not leader", e.knownLeaderId, e)
             createFailureGetReply(e.knownLeaderId, GetReply.Status.NOT_LEADER)
@@ -63,11 +63,10 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
         }
     }
 
-    private fun createSuccessSetReply(leaderId: String?, sqn: Long): SetReply {
+    private fun createSuccessSetReply(leaderId: String?): SetReply {
         return SetReply.newBuilder().apply {
             this.timestamp = clock.millis()
             leaderId?.let { this.leaderId = it }
-            this.sqn = sqn
             this.status = SetReply.Status.SUCCESS
         }.build()
     }
@@ -76,16 +75,15 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
         return SetReply.newBuilder().apply {
             this.timestamp = clock.millis()
             leaderId?.let { this.leaderId = it }
-            this.sqn = UNDEFINED_ID
             this.status = status
         }.build()
     }
 
-    private fun createSuccessGetReply(leaderId: String?, item: LogItem?): GetReply {
+    private fun createSuccessGetReply(leaderId: String?, data: ByteBuffer?): GetReply {
         return GetReply.newBuilder().apply {
             this.timestamp = clock.millis()
             leaderId?.let { this.leaderId = it }
-            this.entry = item?.let { ByteString.copyFrom(it.value) }
+            this.entry = data?.let { ByteString.copyFrom(it) }
             this.status = GetReply.Status.SUCCESS
         }.build()
     }

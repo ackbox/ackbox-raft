@@ -1,6 +1,6 @@
 package com.ackbox.raft.statemachine
 
-import com.ackbox.raft.log.LogItem
+import java.nio.file.Path
 
 /**
  * Interface for Raft's replicated state machine.
@@ -8,25 +8,15 @@ import com.ackbox.raft.log.LogItem
 interface ReplicatedStateMachine {
 
     /**
-     * Index of highest log entry applied to state machine (initialized to 0, increases monotonically).
+     * Apply a state value to the state machine. Each entry contains command for state machine, and term when
+     * entry was received by leader.
      */
-    fun getLastAppliedLogIndex(): Long
+    fun setValue(value: ByteArray)
 
     /**
-     * Term of highest log entry applied to state machine.
+     * Get the state of an entry from the state machine.
      */
-    fun getLastAppliedLogTerm(): Long
-
-    /**
-     * Apply a log entry to the state machine. Each entry contains command for state machine, and term when
-     * entry was received by leader (first index is 1).
-     */
-    fun setItem(item: LogItem)
-
-    /**
-     * Get an applied entry from the state machine.
-     */
-    fun getItem(index: Long): LogItem?
+    fun getValue(key: String): ByteArray?
 
     /**
      * Take a snapshot of the state machine's state. The resulting snapshot should be consistent. The
@@ -34,7 +24,7 @@ interface ReplicatedStateMachine {
      * returns. This means that the implementation of this method does not need to be concerned about
      * concurrency issues.
      */
-    fun takeSnapshot(): Snapshot
+    fun takeSnapshot(): Path
 
     /**
      * Load a snapshot of the state machine's state. The snapshot loading is atomic, meaning that the
@@ -43,5 +33,5 @@ interface ReplicatedStateMachine {
      * this method returns. This means that the implementation of this method does not need to be
      * concerned about concurrency issues.
      */
-    fun restoreSnapshot(snapshot: Snapshot)
+    fun restoreSnapshot(path: Path)
 }

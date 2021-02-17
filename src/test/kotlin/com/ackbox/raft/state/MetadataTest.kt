@@ -58,7 +58,7 @@ internal class MetadataTest {
     }
 
     @Test
-    fun `should not match leaderId if proposed leader does not matche leaderId`() {
+    fun `should not match leaderId if proposed leader does not match leaderId`() {
         val leaderId = krandom<String>()
         val anotherLeaderId = krandom<String>()
         val metadata = Metadata(UUID.randomUUID().toString())
@@ -84,11 +84,15 @@ internal class MetadataTest {
     @Test
     fun `should update commit index`() {
         val metadata = Metadata(UUID.randomUUID().toString())
+        val lastAppliedIndex = krandom<Long>()
+        val lastAppliedTerm = krandom<Long>()
         val newCommitIndex = krandom<Long>()
 
-        metadata.updateCommitIndex(newCommitIndex)
+        metadata.updateCommitMetadata(lastAppliedIndex, lastAppliedTerm, newCommitIndex)
 
-        assertEquals(newCommitIndex, metadata.commitIndex)
+        assertEquals(lastAppliedIndex, metadata.commitMetadata.lastAppliedLogIndex)
+        assertEquals(lastAppliedTerm, metadata.commitMetadata.lastAppliedLogTerm)
+        assertEquals(newCommitIndex, metadata.commitMetadata.commitIndex)
     }
 
     @Test
@@ -100,8 +104,8 @@ internal class MetadataTest {
         metadata.updateAsCandidate()
         metadata.updateAsFollower(operationTerm)
 
-        assertEquals(operationTerm + 1, metadata.currentTerm)
-        assertEquals(Metadata.NodeMode.FOLLOWER, metadata.mode)
+        assertEquals(operationTerm + 1, metadata.consensusMetadata.currentTerm)
+        assertEquals(NodeMode.FOLLOWER, metadata.consensusMetadata.mode)
     }
 
     @Test
@@ -113,8 +117,8 @@ internal class MetadataTest {
         metadata.updateAsFollower(operationTerm)
         metadata.updateAsFollower(nextOperationTerm)
 
-        assertEquals(nextOperationTerm, metadata.currentTerm)
-        assertEquals(Metadata.NodeMode.FOLLOWER, metadata.mode)
+        assertEquals(nextOperationTerm, metadata.consensusMetadata.currentTerm)
+        assertEquals(NodeMode.FOLLOWER, metadata.consensusMetadata.mode)
     }
 
     @Test
@@ -125,8 +129,8 @@ internal class MetadataTest {
         metadata.updateAsFollower(operationTerm)
         metadata.updateAsCandidate()
 
-        assertEquals(operationTerm + 1, metadata.currentTerm)
-        assertEquals(Metadata.NodeMode.CANDIDATE, metadata.mode)
+        assertEquals(operationTerm + 1, metadata.consensusMetadata.currentTerm)
+        assertEquals(NodeMode.CANDIDATE, metadata.consensusMetadata.mode)
     }
 
     @Test
@@ -138,8 +142,8 @@ internal class MetadataTest {
 
         assertTrue(metadata.canAcceptLeader(nodeId))
         assertTrue(metadata.matchesLeaderId(nodeId))
-        assertNull(metadata.leaderId)
-        assertEquals(Metadata.NodeMode.CANDIDATE, metadata.mode)
+        assertNull(metadata.consensusMetadata.leaderId)
+        assertEquals(NodeMode.CANDIDATE, metadata.consensusMetadata.mode)
     }
 
     @Test
@@ -151,7 +155,7 @@ internal class MetadataTest {
 
         assertTrue(metadata.canAcceptLeader(nodeId))
         assertTrue(metadata.matchesLeaderId(nodeId))
-        assertEquals(nodeId, metadata.leaderId)
-        assertEquals(Metadata.NodeMode.LEADER, metadata.mode)
+        assertEquals(nodeId, metadata.consensusMetadata.leaderId)
+        assertEquals(NodeMode.LEADER, metadata.consensusMetadata.mode)
     }
 }
