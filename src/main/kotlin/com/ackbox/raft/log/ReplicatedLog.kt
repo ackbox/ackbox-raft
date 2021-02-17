@@ -1,5 +1,7 @@
 package com.ackbox.raft.log
 
+import com.ackbox.raft.state.Index
+import com.ackbox.raft.state.Term
 import org.slf4j.LoggerFactory
 
 /**
@@ -25,17 +27,17 @@ interface ReplicatedLog {
     /**
      * Index of lowest log entry added to the log (initialized to 0, increases monotonically).
      */
-    fun getFirstItemIndex(): Long
+    fun getFirstItemIndex(): Index
 
     /**
      * Index of highest log entry added to the log (initialized to 0, increases monotonically).
      */
-    fun getLastItemIndex(): Long
+    fun getLastItemIndex(): Index
 
     /**
      * Get log item stored with [index].
      */
-    fun getItem(index: Long): LogItem?
+    fun getItem(index: Index): LogItem?
 
     /**
      * Append log entries received by leader (first index is 1).
@@ -51,18 +53,18 @@ interface ReplicatedLog {
      * Truncate the log at the [index]. This means that all entries before [index] (non-inclusive) will be
      * remove from the log.
      */
-    fun truncateBeforeNonInclusive(index: Long)
+    fun truncateBeforeNonInclusive(index: Index)
 
     /**
      * Truncate the log at the [index]. This means that all entries after [index] (inclusive) will be
      * remove from the log.
      */
-    fun truncateAfterInclusive(index: Long)
+    fun truncateAfterInclusive(index: Index)
 
     /**
      * Check whether the log contains an entry at [externalIndex] matching [externalTerm].
      */
-    fun containsItem(externalIndex: Long, externalTerm: Long): Boolean {
+    fun containsItem(externalIndex: Index, externalTerm: Term): Boolean {
         val lastItemIndex = getLastItemIndex()
         if (externalIndex > lastItemIndex) {
             LOG.info("Log is not caught up: externalIndex=[{}] and internalIndex=[{}]", externalIndex, lastItemIndex)
@@ -84,7 +86,7 @@ interface ReplicatedLog {
      * later term is more up-to-date. If the logs end with the same term, then whichever log is longer is
      * more up-to-date.
      */
-    fun isAheadOf(externalIndex: Long, externalTerm: Long): Boolean {
+    fun isAheadOf(externalIndex: Index, externalTerm: Term): Boolean {
         val item = getItem(getLastItemIndex())
         if (item != null) {
             if (item.term != externalTerm) {

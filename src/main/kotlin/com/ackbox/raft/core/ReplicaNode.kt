@@ -1,6 +1,8 @@
 package com.ackbox.raft.core
 
 import com.ackbox.raft.log.LogItem
+import com.ackbox.raft.state.Index
+import com.ackbox.raft.state.Term
 import kotlinx.coroutines.flow.Flow
 import java.nio.ByteBuffer
 
@@ -17,14 +19,14 @@ interface ReplicaNode {
     object Append {
         data class Input(
             val leaderId: String,
-            val leaderTerm: Long,
-            val previousLogIndex: Long,
-            val previousLogTerm: Long,
-            val leaderCommitIndex: Long,
+            val leaderTerm: Term,
+            val previousLogIndex: Index,
+            val previousLogTerm: Term,
+            val leaderCommitIndex: Index,
             val items: List<LogItem>
         )
 
-        data class Output(val currentTerm: Long, val lastLogItemIndex: Long)
+        data class Output(val currentTerm: Term, val lastLogItemIndex: Index)
     }
 
     /**
@@ -35,12 +37,12 @@ interface ReplicaNode {
     object Vote {
         data class Input(
             val candidateId: String,
-            val candidateTerm: Long,
-            val lastLogIndex: Long,
-            val lastLogTerm: Long
+            val candidateTerm: Term,
+            val lastLogIndex: Index,
+            val lastLogTerm: Term
         )
 
-        data class Output(val currentTerm: Long)
+        data class Output(val currentTerm: Term)
     }
 
     /**
@@ -51,13 +53,13 @@ interface ReplicaNode {
     object Snapshot {
         data class Input(
             val leaderId: String,
-            val leaderTerm: Long,
-            val lastIncludedLogIndex: Long,
-            val lastIncludedLogTerm: Long,
+            val leaderTerm: Term,
+            val lastIncludedLogIndex: Index,
+            val lastIncludedLogTerm: Term,
             val partial: ByteBuffer
         )
 
-        data class Output(val currentTerm: Long)
+        data class Output(val currentTerm: Term)
     }
 
     /**

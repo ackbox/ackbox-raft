@@ -1,7 +1,6 @@
 package com.ackbox.raft.state
 
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.core.UNDEFINED_ID
 import com.ackbox.raft.log.LogItem
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.log.SegmentedLog
@@ -21,8 +20,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.NotThreadSafe
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * State for the current local node. This class encapsulates an instance of [UnsafeLocalNodeState].
@@ -96,7 +93,7 @@ class UnsafeLocalNodeState(
         log.close()
     }
 
-    fun ensureValidLeader(leaderId: String, leaderTerm: Long) {
+    fun ensureValidLeader(leaderId: String, leaderTerm: Term) {
         val currentTerm = metadata.consensusMetadata.currentTerm
         val currentLeaderId = metadata.consensusMetadata.leaderId
         if (currentTerm > leaderTerm) {
@@ -112,12 +109,12 @@ class UnsafeLocalNodeState(
         } else if (!metadata.matchesLeaderId(leaderId)) {
             // Force caller node to step down by incrementing the term.
             logger.info("Multiple leaders detected: leaderId=[{}], otherId=[{}]", currentLeaderId, leaderId)
-            transitionToFollower(currentTerm + 1)
-            throw LeaderMismatchException(currentLeaderId, currentTerm + 1, log.getLastItemIndex())
+            transitionToFollower(currentTerm.incremented())
+            throw LeaderMismatchException(currentLeaderId, currentTerm.incremented(), log.getLastItemIndex())
         }
     }
 
-    fun ensureValidCandidate(candidateId: String, candidateTerm: Long, lastLogIndex: Long, lastLogTerm: Long) {
+    fun ensureValidCandidate(candidateId: String, candidateTerm: Term, lastLogIndex: Index, lastLogTerm: Term) {
         // Check whether the candidate node has a term greater than the term known by this node.
         val currentTerm = metadata.consensusMetadata.currentTerm
         if (currentTerm > candidateTerm) {
@@ -139,12 +136,12 @@ class UnsafeLocalNodeState(
         }
     }
 
-    fun appendLogItems(items: List<LogItem>): Long {
+    fun appendLogItems(items: List<LogItem>): Index {
         log.appendItems(items)
         return log.getLastItemIndex()
     }
 
-    fun commitLogItems(leaderCommitIndex: Long) {
+    fun commitLogItems(leaderCommitIndex: Index) {
         // If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
         val commitMetadata = metadata.commitMetadata
         var commitIndex = commitMetadata.commitIndex
@@ -155,9 +152,9 @@ class UnsafeLocalNodeState(
         // If commitIndex > lastApplied, increment lastApplied, apply log[lastApplied] to state machine.
         val lastAppliedLogIndex = commitMetadata.lastAppliedLogIndex
         if (commitIndex > lastAppliedLogIndex) {
-            val itemApplyRange = lastAppliedLogIndex..commitIndex
+            val itemApplyRange = lastAppliedLogIndex.value..commitIndex.value
             itemApplyRange.forEach { index ->
-                val item = log.getItem(index) ?: throw IllegalStateException("Corrupted log at index [$index]")
+                val item = log.getItem(Index(index)) ?: throw IllegalStateException("Corrupted log at index [$index]")
                 stateMachine.setValue(item.value)
                 // Update lastAppliedLogIndex to currently applied item index.
                 metadata.updateCommitMetadata(item.index, item.term, commitIndex)
@@ -211,7 +208,7 @@ class UnsafeLocalNodeState(
         metadata.updateVote(candidateId)
     }
 
-    fun refreshLeaderInformation(leaderId: String, leaderTerm: Long) {
+    fun refreshLeaderInformation(leaderId: String, leaderTerm: Term) {
         transitionToFollower(leaderTerm)
         metadata.updateLeaderId(leaderId)
     }
@@ -222,7 +219,7 @@ class UnsafeLocalNodeState(
         timer.stopElectionTimer()
     }
 
-    fun transitionToFollower(operationTerm: Long) {
+    fun transitionToFollower(operationTerm: Term) {
         metadata.updateAsFollower(operationTerm)
         timer.stopHeartbeatTimer()
         timer.restartElectionTimer(electionCallback)
@@ -237,8 +234,8 @@ class UnsafeLocalNodeState(
     private fun loadState() {
         logger.info("Loading state using snapshot [{}]", snapshot)
         val lastLogItem = log.getItem(log.getLastItemIndex())
-        val index = max(snapshot.lastIncludedLogIndex, lastLogItem?.index ?: UNDEFINED_ID)
-        val term = max(snapshot.lastIncludedLogTerm, lastLogItem?.term ?: UNDEFINED_ID)
+        val index = max(snapshot.lastIncludedLogIndex, lastLogItem?.index ?: Index())
+        val term = max(snapshot.lastIncludedLogTerm, lastLogItem?.term ?: Term())
         val commitIndex = snapshot.lastIncludedLogIndex
         stateMachine.restoreSnapshot(snapshot.dataPath)
         log.open()

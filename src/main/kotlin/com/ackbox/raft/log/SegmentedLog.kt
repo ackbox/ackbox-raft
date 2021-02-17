@@ -1,7 +1,7 @@
 package com.ackbox.raft.log
 
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.core.UNDEFINED_ID
+import com.ackbox.raft.state.Index
 import com.ackbox.raft.support.NodeLogger
 import com.google.common.annotations.VisibleForTesting
 import java.nio.file.Files
@@ -18,7 +18,7 @@ import kotlin.streams.asSequence
 class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
 
     private val logger: NodeLogger = NodeLogger.from(config.nodeId, SegmentedLog::class)
-    private val segments: TreeMap<Long, Segment> = TreeMap<Long, Segment>()
+    private val segments: TreeMap<Index, Segment> = TreeMap<Index, Segment>()
 
     override fun open() {
         logger.info("Opening segments from [{}]", config.logPath)
@@ -26,7 +26,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         Files.walk(config.logPath).asSequence()
             .filter<Path>(Files::isRegularFile)
             .map { path -> Segment.getFirstIndexFromFilename(path.fileName.toString()) }
-            .map { index -> Segment(index, config.logPath, config.maxLogSegmentSizeInBytes) }
+            .map { index -> Segment(Index(index), config.logPath, config.maxLogSegmentSizeInBytes) }
             .onEach { segment -> segment.load() }
             .forEach { segment -> segments[segment.firstItemIndex] = segment }
         segments.lastEntry()?.value?.open()
@@ -46,17 +46,17 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         close()
     }
 
-    override fun getFirstItemIndex(): Long {
+    override fun getFirstItemIndex(): Index {
         val firstSegment = segments.firstEntry()?.value
-        return firstSegment?.firstItemIndex ?: UNDEFINED_ID
+        return firstSegment?.firstItemIndex ?: Index.UNDEFINED
     }
 
-    override fun getLastItemIndex(): Long {
+    override fun getLastItemIndex(): Index {
         val lastSegment = segments.lastEntry()?.value
-        return lastSegment?.lastItemIndex ?: UNDEFINED_ID
+        return lastSegment?.lastItemIndex ?: Index.UNDEFINED
     }
 
-    override fun getItem(index: Long): LogItem? {
+    override fun getItem(index: Index): LogItem? {
         logger.debug("Getting item at [{}]", index)
         return getSegmentFor(index)?.get(index)
     }
@@ -91,7 +91,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         segments.clear()
     }
 
-    override fun truncateBeforeNonInclusive(index: Long) {
+    override fun truncateBeforeNonInclusive(index: Index) {
         logger.info("Truncating logs before index [{}]", index)
         val toRemove = segments.navigableKeySet().headSet(index).toSet()
         toRemove.forEach { segmentIndex ->
@@ -101,7 +101,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         }
     }
 
-    override fun truncateAfterInclusive(index: Long) {
+    override fun truncateAfterInclusive(index: Index) {
         logger.info("Truncating logs after index [{}]", index)
         val toRemove = segments.navigableKeySet().tailSet(index).toSet()
         toRemove.forEach { segmentIndex ->
@@ -109,7 +109,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
             segmentToRemove?.safelyClose()
             segmentToRemove?.safelyDelete()
         }
-        getSegmentFor(index )?.open()?.truncateAt(index)
+        getSegmentFor(index)?.open()?.truncateAt(index)
     }
 
     @VisibleForTesting
@@ -130,7 +130,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
         return segments.lastEntry()!!.value.open()
     }
 
-    private fun getSegmentFor(index: Long): Segment? {
+    private fun getSegmentFor(index: Index): Segment? {
         val firstLogIndex = getFirstItemIndex()
         val lastLogIndex = getLastItemIndex()
         if (index < firstLogIndex || index > lastLogIndex) {

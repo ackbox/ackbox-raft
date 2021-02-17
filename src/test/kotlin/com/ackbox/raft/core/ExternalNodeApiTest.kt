@@ -4,6 +4,7 @@ import com.ackbox.raft.api.GetReply
 import com.ackbox.raft.api.GetRequest
 import com.ackbox.raft.api.SetReply
 import com.ackbox.raft.api.SetRequest
+import com.ackbox.raft.state.Index
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NotLeaderException
@@ -141,7 +142,7 @@ internal class ExternalNodeApiTest {
     companion object {
 
         private val LEADER_ID = krandom<String>()
-        private val COMMIT_INDEX = krandom<Long>()
+        private val COMMIT_INDEX = krandom<Index>()
         private val DATA = krandom<ByteBuffer>()
     }
 }

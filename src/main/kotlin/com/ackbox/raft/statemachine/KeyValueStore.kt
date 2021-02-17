@@ -34,9 +34,9 @@ class KeyValueStore(config: NodeConfig) : ReplicatedStateMachine {
         return file.toPath()
     }
 
-    override fun restoreSnapshot(dataPath: Path) {
+    override fun restoreSnapshot(path: Path) {
         store.clear()
-        store.putAll(SERIALIZER.readValue<Map<String, KV>>(dataPath.toFile()))
+        store.putAll(SERIALIZER.readValue<Map<String, KV>>(path.toFile()))
     }
 
     companion object {

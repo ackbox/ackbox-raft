@@ -6,8 +6,10 @@ import com.ackbox.raft.core.LeaderNode.Set
 import com.ackbox.raft.core.ReplicaNode.Append
 import com.ackbox.raft.core.ReplicaNode.Vote
 import com.ackbox.raft.log.LogItem
+import com.ackbox.raft.state.Index
 import com.ackbox.raft.state.LocalNodeState
 import com.ackbox.raft.state.NodeMode
+import com.ackbox.raft.state.Term
 import com.ackbox.raft.statemachine.Snapshot
 import com.ackbox.raft.support.Callback
 import com.ackbox.raft.support.CommitIndexMismatchException
@@ -84,10 +86,10 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
 
             // Verify replication consensus status across majority in the cluster.
             val matchIndexes = mutableListOf<Long>()
-                .apply { peerStates.forEach { add(it.matchLogIndex) } }
-                .apply { add(lastLogItemIndex) }
+                .apply { peerStates.forEach { add(it.matchLogIndex.value) } }
+                .apply { add(lastLogItemIndex.value) }
                 .sorted()
-            val commitIndex = matchIndexes[remotes.size / 2]
+            val commitIndex = Index(matchIndexes[remotes.size / 2])
             val commitMetadata = state.metadata.commitMetadata
             logger.info("Commit index updated from [{}] to [{}]", commitMetadata.commitIndex, commitIndex)
 
@@ -147,14 +149,15 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
             val currentTerm = state.metadata.consensusMetadata.currentTerm
             val previousLogIndex = input.previousLogIndex
             val previousLogTerm = input.previousLogTerm
-            val isFirstAppend = previousLogIndex == UNDEFINED_ID && previousLogTerm == UNDEFINED_ID
+            val isFirstAppend = previousLogIndex.isUndefined() && previousLogTerm.isUndefined()
             if (!isFirstAppend && !state.log.containsItem(previousLogIndex, previousLogTerm)) {
                 logger.info("Log mismatch for logIndex=[{}] and logTerm=[{}]", previousLogIndex, previousLogTerm)
                 // Optimization can be done in order to ensure minimum retransmission. Instead of returning
                 // previousLogIndex - 1 for the case of index mismatch, we can return state.getLog().getLastItemIndex().
                 val lastLogItem = state.log.getItem(state.log.getLastItemIndex())!!
                 val lastLogIndex = lastLogItem.index
-                val correctionLogIndex = if (lastLogIndex == previousLogIndex) previousLogIndex - 1 else lastLogIndex
+                val correctionLogIndex =
+                    if (lastLogIndex == previousLogIndex) previousLogIndex.decremented() else lastLogIndex
                 throw ReplicaStateMismatchException(currentTerm, correctionLogIndex)
             }
 
@@ -301,9 +304,10 @@ class LocalNode(private val locked: LocalNodeState, private val remotes: RemoteN
         }
     }
 
-    private fun convertToLogItems(currentTerm: Long, lastItemIndex: Long, data: List<ByteArray>): List<LogItem> {
-        var entryIndex = lastItemIndex + 1
-        return data.map { LogItem(entryIndex++, currentTerm, it) }
+    private fun convertToLogItems(currentTerm: Term, lastItemIndex: Index, data: List<ByteArray>): List<LogItem> {
+        return data.mapIndexed { index, bytes ->
+            LogItem(lastItemIndex.incrementedBy(index.toLong()), currentTerm, bytes)
+        }
     }
 
     companion object {

@@ -2,6 +2,7 @@ package com.ackbox.raft.log
 
 import com.ackbox.raft.Fixtures
 import com.ackbox.raft.core.Randoms
+import com.ackbox.raft.state.Index
 import com.ackbox.raft.use
 import com.ackbox.random.krandom
 import com.google.common.primitives.Longs
@@ -22,9 +23,9 @@ internal class SegmentTest {
 
     @Test
     fun `should reject append of segment is not open`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         val firstItem = createLogItem(firstIndex)
-        val secondItem = createLogItem(firstIndex + 1)
+        val secondItem = createLogItem(firstIndex.incremented())
         val segment = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).load()
 
         segment.open()
@@ -35,10 +36,10 @@ internal class SegmentTest {
 
     @Test
     fun `should reject append of non-sequential log items`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         val firstItem = createLogItem(firstIndex)
-        val secondItem = createLogItem(firstIndex + 1)
-        val outOfSequenceItem = createLogItem(firstIndex + INDEX_DIFF)
+        val secondItem = createLogItem(firstIndex.incremented())
+        val outOfSequenceItem = createLogItem(firstIndex.incrementedBy(INDEX_DIFF))
         val segment = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).open()
         assertSegmentInitialState(firstIndex, segment)
 
@@ -54,9 +55,9 @@ internal class SegmentTest {
 
     @Test
     fun `should reject get of out-of-bounds log items`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         val firstItem = createLogItem(firstIndex)
-        val outOfBoundItem = createLogItem(firstIndex - INDEX_DIFF)
+        val outOfBoundItem = createLogItem(firstIndex.decrementedBy(INDEX_DIFF))
 
         Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
             assertSegmentInitialState(firstIndex, segment)
@@ -70,13 +71,13 @@ internal class SegmentTest {
 
     @Test
     fun `should create segment from non-existent file`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         val item = createLogItem(firstIndex)
         val segment = Segment(firstIndex, baseFolder.toPath(), SIZE_1024).load().open()
         assertSegmentInitialState(firstIndex, segment)
 
         assertEquals(firstIndex, segment.firstItemIndex)
-        assertEquals(firstIndex - 1, segment.lastItemIndex) // Since it's empty.
+        assertEquals(firstIndex.decremented(), segment.lastItemIndex) // Since it's empty.
         segment.append(item)
 
         assertEquals(firstIndex, segment.firstItemIndex)
@@ -86,8 +87,10 @@ internal class SegmentTest {
 
     @Test
     fun `should load segment from file`() {
-        val firstIndex = System.nanoTime()
-        val items = (0 until Randoms.between(5, 50)).map { offset -> createLogItem(firstIndex + offset) }
+        val firstIndex = Index(System.nanoTime())
+        val items = (0 until Randoms.between(5, 50)).map { offset ->
+            createLogItem(firstIndex.incrementedBy(offset))
+        }
 
         Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
             items.forEach { item -> segment.append(item) }
@@ -99,11 +102,13 @@ internal class SegmentTest {
 
     @Test
     fun `should append to segment after loading from file`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         val firstOffset = Randoms.between(5, 10)
         val secondOffset = Randoms.between(10, 20)
-        val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex + offset) }
-        val extraItems = (firstOffset until secondOffset).map { offset -> createLogItem(firstIndex + offset) }
+        val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex.incrementedBy(offset)) }
+        val extraItems = (firstOffset until secondOffset).map { offset ->
+            createLogItem(firstIndex.incrementedBy(offset))
+        }
 
         Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
             items.forEach { item -> segment.append(item) }
@@ -118,9 +123,9 @@ internal class SegmentTest {
 
     @Test
     fun `should reject item if segment is full`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         val item1 = createLogItem(firstIndex)
-        val item2 = createLogItem(firstIndex + 1)
+        val item2 = createLogItem(firstIndex.incremented())
         val singleItemDataSize = LogItemSerializer.HEADER_SIZE_BYTES + item1.getSizeInBytes()
 
         Segment(firstIndex, baseFolder.toPath(), singleItemDataSize).use { segment ->
@@ -132,12 +137,16 @@ internal class SegmentTest {
 
     @Test
     fun `should be able to truncate at a specific index`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         val firstOffset = Randoms.between(5, 10)
         val secondOffset = Randoms.between(10, 20)
-        val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex + offset) }
-        val tailItems1 = (firstOffset until secondOffset).map { offset -> createLogItem(firstIndex + offset) }
-        val tailItems2 = (firstOffset until secondOffset).map { offset -> createLogItem(firstIndex + offset) }
+        val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex.incrementedBy(offset)) }
+        val tailItems1 = (firstOffset until secondOffset).map { offset ->
+            createLogItem(firstIndex.incrementedBy(offset))
+        }
+        val tailItems2 = (firstOffset until secondOffset).map { offset ->
+            createLogItem(firstIndex.incrementedBy(offset))
+        }
 
         Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
             items.forEach { item -> segment.append(item) }
@@ -153,9 +162,9 @@ internal class SegmentTest {
 
     @Test
     fun `should be able to delete segments`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         val firstOffset = Randoms.between(5, 20)
-        val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex + offset) }
+        val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex.incrementedBy(offset)) }
 
         Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
             items.forEach { item -> segment.append(item) }
@@ -171,7 +180,7 @@ internal class SegmentTest {
 
     @Test
     fun `should properly expose isEmpty method`() {
-        val firstIndex = System.nanoTime()
+        val firstIndex = Index(System.nanoTime())
         Segment(firstIndex, baseFolder.toPath(), SIZE_1024).use { segment ->
             assertTrue(segment.isEmpty())
             segment.append(createLogItem(firstIndex))
@@ -179,9 +188,9 @@ internal class SegmentTest {
         }
     }
 
-    private fun assertSegmentInitialState(firstIndex: Long, segment: Segment) {
+    private fun assertSegmentInitialState(firstIndex: Index, segment: Segment) {
         assertEquals(firstIndex, segment.firstItemIndex)
-        assertEquals(firstIndex, segment.lastItemIndex + 1)
+        assertEquals(firstIndex, segment.lastItemIndex.incremented())
     }
 
     private fun assertItemStorage(item: LogItem, segment: Segment) {
@@ -189,14 +198,13 @@ internal class SegmentTest {
         assertEquals(item, segment.get(item.index))
     }
 
-    private fun createLogItem(index: Long): LogItem {
-        return Fixtures.createLogItem(index, TERM, DATA_8_BYTES)
+    private fun createLogItem(index: Index): LogItem {
+        return Fixtures.createLogItem(index, data = DATA_8_BYTES)
     }
 
     companion object {
 
         private const val INDEX_DIFF: Long = 5
-        private const val TERM: Long = 0
         private const val SIZE_1024: Int = 1024
         private val DATA_8_BYTES = Longs.toByteArray(krandom())
     }

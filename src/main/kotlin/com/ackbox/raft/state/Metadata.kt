@@ -37,7 +37,7 @@ class Metadata(val nodeId: String) {
         consensusMetadata = consensusMetadata.copy(votedFor = null, leaderId = proposedLeaderId)
     }
 
-    fun updateCommitMetadata(appliedLogIndex: Long, appliedLogTerm: Long, commitIndex: Long) {
+    fun updateCommitMetadata(appliedLogIndex: Index, appliedLogTerm: Term, commitIndex: Index) {
         commitMetadata = commitMetadata.copy(
             lastAppliedLogIndex = appliedLogIndex,
             lastAppliedLogTerm = appliedLogTerm,
@@ -45,7 +45,7 @@ class Metadata(val nodeId: String) {
         )
     }
 
-    fun updateAsFollower(operationTerm: Long) {
+    fun updateAsFollower(operationTerm: Term) {
         logger.info("Updating node state as follower with term=[{}]", operationTerm)
         val currentTerm = if (consensusMetadata.currentTerm < operationTerm) {
             logger.info("Updating term with term=[{}] and resetting votedFor", operationTerm)
@@ -59,7 +59,7 @@ class Metadata(val nodeId: String) {
     fun updateAsCandidate() {
         logger.info("Updating node state as candidate")
         consensusMetadata = consensusMetadata.copy(
-            currentTerm = consensusMetadata.currentTerm + 1,
+            currentTerm = consensusMetadata.currentTerm.incremented(),
             leaderId = null,
             votedFor = nodeId,
             mode = NodeMode.CANDIDATE

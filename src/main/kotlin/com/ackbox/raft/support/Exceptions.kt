@@ -1,33 +1,36 @@
 package com.ackbox.raft.support
 
+import com.ackbox.raft.state.Index
+import com.ackbox.raft.state.Term
+
 /**
  * Exception for the case where current term does not match the term from a remote peer/node.
  */
-class ReplyTermInvariantException(val currentTerm: Long, val remoteTerm: Long) :
+class ReplyTermInvariantException(val currentTerm: Term, val remoteTerm: Term) :
     RetryableException("Term mismatch: current=[$currentTerm] and remote=[$remoteTerm]")
 
 /**
  * Exception for the case where current term does not match the term from leader node.
  */
-class RequestTermInvariantException(val term: Long, remoteTerm: Long, val lastLogIndex: Long) :
+class RequestTermInvariantException(val term: Term, remoteTerm: Term, val lastLogIndex: Index) :
     RetryableException("Term mismatch: current=[$term], remote=[$remoteTerm] and lastLogIndex=[$lastLogIndex]")
 
 /**
  * Exception for the case where a node receive a request from a leader that it does not recognize.
  */
-class LeaderMismatchException(knownLeaderId: String?, val term: Long, val lastLogIndex: Long) :
+class LeaderMismatchException(knownLeaderId: String?, val term: Term, val lastLogIndex: Index) :
     RetryableException("Node is not the leader - known leaderId=[$knownLeaderId]")
 
 /**
  * Exception for the case where a replica node does not agree with leader node's state.
  */
-class ReplicaStateMismatchException(val term: Long, val lastLogIndex: Long) :
+class ReplicaStateMismatchException(val term: Term, val lastLogIndex: Index) :
     RetryableException("Inconsistent state: term=[$term] and lastLogIndex=[$lastLogIndex]")
 
 /**
  * Exception for the case where a replica node is not able to vote for the candidate.
  */
-class VoteNotGrantedException(candidateId: String, val term: Long) :
+class VoteNotGrantedException(candidateId: String, val term: Term) :
     NonRetryableException("Replica cannot vote for candidate: candidate=[$candidateId] and term=[$term]")
 
 /**
@@ -40,7 +43,7 @@ class NotLeaderException(val knownLeaderId: String?) :
 /**
  * Exception for the case where followers are not able to agree on the desired replication state.
  */
-class CommitIndexMismatchException(val leaderId: String?, desiredCommitIndex: Long, actualCommitIndex: Long) :
+class CommitIndexMismatchException(val leaderId: String?, desiredCommitIndex: Index, actualCommitIndex: Index) :
     NonRetryableException("Unable to reach consensus on commit index - desired=[$desiredCommitIndex] and actual=[$actualCommitIndex]")
 
 /**

@@ -1,5 +1,7 @@
 package com.ackbox.raft.log
 
+import com.ackbox.raft.state.Index
+import com.ackbox.raft.state.Term
 import java.nio.ByteBuffer
 
 object LogItemSerializer {
@@ -10,8 +12,8 @@ object LogItemSerializer {
 
     fun toByteBuffer(item: LogItem): ByteBuffer {
         val buffer = ByteBuffer.allocate(item.getSizeInBytes())
-        buffer.putLong(item.index)
-        buffer.putLong(item.term)
+        buffer.putLong(item.index.value)
+        buffer.putLong(item.term.value)
         buffer.put(item.value)
         buffer.flip()
         return buffer
@@ -22,6 +24,6 @@ object LogItemSerializer {
         val term = buffer.long
         val value = ByteArray(buffer.remaining())
         buffer.get(value)
-        return LogItem(index, term, value)
+        return LogItem(Index(index), Term(term), value)
     }
 }

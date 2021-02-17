@@ -4,6 +4,7 @@ import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.networking.NamedChannel
 import com.ackbox.raft.networking.NodeNetworking
+import com.ackbox.raft.state.Index
 import com.ackbox.raft.state.Metadata
 import com.ackbox.raft.state.RemoteNodeState
 import com.ackbox.raft.statemachine.Snapshot
@@ -26,7 +27,7 @@ class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>, 
         return broadcastInParallel { remote -> remote.sendVote(metadata, log) }
     }
 
-    fun resetState(nextLogIndex: Long) {
+    fun resetState(nextLogIndex: Index) {
         remotes.values.forEach { remote -> remote.resetState(nextLogIndex) }
     }
 

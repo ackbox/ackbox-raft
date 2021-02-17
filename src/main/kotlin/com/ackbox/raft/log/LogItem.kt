@@ -1,9 +1,12 @@
 package com.ackbox.raft.log
 
+import com.ackbox.raft.state.Index
+import com.ackbox.raft.state.Term
+
 /**
  * Data class representing a log item.
  */
-data class LogItem(val index: Long, val term: Long, val value: ByteArray) {
+data class LogItem(val index: Index, val term: Term, val value: ByteArray) {
 
     fun getSizeInBytes(): Int = 2 * Long.SIZE_BYTES + value.size
 
@@ -25,6 +28,6 @@ data class LogItem(val index: Long, val term: Long, val value: ByteArray) {
     }
 
     override fun toString(): String {
-        return "${LogItem::class.simpleName}(index=$index, term=$term, size=${value.size})"
+        return "${LogItem::class.simpleName}(index=${index.value}, term=${term.value}, size=${value.size})"
     }
 }

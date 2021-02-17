@@ -8,6 +8,8 @@ import com.ackbox.raft.api.SnapshotRequest
 import com.ackbox.raft.api.VoteReply
 import com.ackbox.raft.api.VoteRequest
 import com.ackbox.raft.log.LogItem
+import com.ackbox.raft.state.Index
+import com.ackbox.raft.state.Term
 import com.ackbox.raft.support.LeaderMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger
@@ -35,10 +37,10 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         return try {
             val input = ReplicaNode.Append.Input(
                 request.leaderId,
-                request.leaderTerm,
-                request.previousLogIndex,
-                request.previousLogTerm,
-                request.leaderCommitIndex,
+                Term(request.leaderTerm),
+                Index(request.previousLogIndex),
+                Term(request.previousLogTerm),
+                Index(request.leaderCommitIndex),
                 request.entriesList.map { it.toLogItem() }
             )
             val output = node.handleAppend(input)
@@ -54,10 +56,12 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             createFailureAppendReply(e.term, e.lastLogIndex, AppendReply.Status.LOG_STATE_MISMATCH)
         } catch (e: LockNotAcquiredException) {
             logger.warn("Unable to complete request since node is busy", e)
-            createFailureAppendReply(UNDEFINED_ID, UNDEFINED_ID, AppendReply.Status.PROCESSING)
+            createFailureAppendReply(Term.UNDEFINED, Index.UNDEFINED, AppendReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureAppendReply(request.leaderTerm, request.previousLogIndex, AppendReply.Status.UNKNOWN)
+            val term = Term(request.leaderTerm)
+            val lastLogIndex = Index(request.previousLogIndex)
+            createFailureAppendReply(term, lastLogIndex, AppendReply.Status.UNKNOWN)
         }
     }
 
@@ -66,9 +70,9 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         return try {
             val input = ReplicaNode.Vote.Input(
                 request.candidateId,
-                request.candidateTerm,
-                request.lastLogIndex,
-                request.lastLogTerm
+                Term(request.candidateTerm),
+                Index(request.lastLogIndex),
+                Term(request.lastLogTerm)
             )
             val output = node.handleVote(input)
             createSuccessVoteReply(output.currentTerm)
@@ -80,10 +84,10 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             createFailureVoteReply(e.term, VoteReply.Status.VOTE_NOT_GRANTED)
         } catch (e: LockNotAcquiredException) {
             logger.warn("Unable to complete request since node is busy", e)
-            createFailureVoteReply(UNDEFINED_ID, VoteReply.Status.PROCESSING)
+            createFailureVoteReply(Term.UNDEFINED, VoteReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureVoteReply(request.candidateTerm, VoteReply.Status.UNKNOWN)
+            createFailureVoteReply(Term(request.candidateTerm), VoteReply.Status.UNKNOWN)
         }
     }
 
@@ -92,16 +96,16 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         // If [processingSnapshot] cannot be atomically set, it means that the node is still
         // processing a previous snapshot request.
         if (!processingSnapshot.compareAndSet(false, true)) {
-            return createFailureSnapshotReply(UNDEFINED_ID, SnapshotReply.Status.PROCESSING)
+            return createFailureSnapshotReply(Term.UNDEFINED, SnapshotReply.Status.PROCESSING)
         }
         return try {
             val inputs = requests.flowOn(Dispatchers.IO).transform { request ->
                 emit(
                     ReplicaNode.Snapshot.Input(
                         request.leaderId,
-                        request.leaderTerm,
-                        request.lastIncludedLogIndex,
-                        request.lastIncludedLogTerm,
+                        Term(request.leaderTerm),
+                        Index(request.lastIncludedLogIndex),
+                        Term(request.lastIncludedLogTerm),
                         ByteBuffer.wrap(request.data.toByteArray())
                     )
                 )
@@ -116,63 +120,63 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             createFailureSnapshotReply(e.term, SnapshotReply.Status.TERM_MISMATCH)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureSnapshotReply(UNDEFINED_ID, SnapshotReply.Status.UNKNOWN)
+            createFailureSnapshotReply(Term.UNDEFINED, SnapshotReply.Status.UNKNOWN)
         } finally {
             processingSnapshot.set(false)
         }
     }
 
-    private fun createSuccessAppendReply(term: Long, lastLogIndex: Long): AppendReply {
+    private fun createSuccessAppendReply(term: Term, lastLogIndex: Index): AppendReply {
         return AppendReply.newBuilder().apply {
             this.timestamp = clock.millis()
-            this.currentTerm = term
-            this.lastLogIndex = lastLogIndex
+            this.currentTerm = term.value
+            this.lastLogIndex = lastLogIndex.value
             this.status = AppendReply.Status.SUCCESS
         }.build()
     }
 
-    private fun createFailureAppendReply(term: Long, lastLogIndex: Long, status: AppendReply.Status): AppendReply {
+    private fun createFailureAppendReply(term: Term, lastLogIndex: Index, status: AppendReply.Status): AppendReply {
         return AppendReply.newBuilder().apply {
             this.timestamp = clock.millis()
-            this.currentTerm = term
-            this.lastLogIndex = lastLogIndex
+            this.currentTerm = term.value
+            this.lastLogIndex = lastLogIndex.value
             this.status = status
         }.build()
     }
 
-    private fun createSuccessVoteReply(term: Long): VoteReply {
+    private fun createSuccessVoteReply(term: Term): VoteReply {
         return VoteReply.newBuilder().apply {
             this.timestamp = clock.millis()
-            this.currentTerm = term
+            this.currentTerm = term.value
             this.status = VoteReply.Status.VOTE_GRANTED
         }.build()
     }
 
-    private fun createFailureVoteReply(term: Long, status: VoteReply.Status): VoteReply {
+    private fun createFailureVoteReply(term: Term, status: VoteReply.Status): VoteReply {
         return VoteReply.newBuilder().apply {
             this.timestamp = clock.millis()
-            this.currentTerm = term
+            this.currentTerm = term.value
             this.status = status
         }.build()
     }
 
-    private fun createSuccessSnapshotReply(term: Long): SnapshotReply {
+    private fun createSuccessSnapshotReply(term: Term): SnapshotReply {
         return SnapshotReply.newBuilder().apply {
             this.timestamp = clock.millis()
-            this.currentTerm = term
+            this.currentTerm = term.value
             this.status = SnapshotReply.Status.SUCCESS
         }.build()
     }
 
-    private fun createFailureSnapshotReply(term: Long, status: SnapshotReply.Status): SnapshotReply {
+    private fun createFailureSnapshotReply(term: Term, status: SnapshotReply.Status): SnapshotReply {
         return SnapshotReply.newBuilder().apply {
             this.timestamp = clock.millis()
-            this.currentTerm = term
+            this.currentTerm = term.value
             this.status = status
         }.build()
     }
 
     private fun AppendRequest.Entry.toLogItem(): LogItem {
-        return LogItem(index, term, entry.toByteArray())
+        return LogItem(Index(index), Term(term), entry.toByteArray())
     }
 }

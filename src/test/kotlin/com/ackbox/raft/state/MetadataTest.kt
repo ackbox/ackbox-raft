@@ -84,9 +84,9 @@ internal class MetadataTest {
     @Test
     fun `should update commit index`() {
         val metadata = Metadata(UUID.randomUUID().toString())
-        val lastAppliedIndex = krandom<Long>()
-        val lastAppliedTerm = krandom<Long>()
-        val newCommitIndex = krandom<Long>()
+        val lastAppliedIndex = krandom<Index>()
+        val lastAppliedTerm = krandom<Term>()
+        val newCommitIndex = krandom<Index>()
 
         metadata.updateCommitMetadata(lastAppliedIndex, lastAppliedTerm, newCommitIndex)
 
@@ -98,21 +98,21 @@ internal class MetadataTest {
     @Test
     fun `should not update term when updating as follower if operationTerm is less than currentTerm`() {
         val metadata = Metadata(UUID.randomUUID().toString())
-        val operationTerm = krandom<Long>()
+        val operationTerm = krandom<Term>()
 
         metadata.updateAsFollower(operationTerm)
         metadata.updateAsCandidate()
         metadata.updateAsFollower(operationTerm)
 
-        assertEquals(operationTerm + 1, metadata.consensusMetadata.currentTerm)
+        assertEquals(operationTerm.incremented(), metadata.consensusMetadata.currentTerm)
         assertEquals(NodeMode.FOLLOWER, metadata.consensusMetadata.mode)
     }
 
     @Test
     fun `should update term when updating as follower if operationTerm is greater than currentTerm`() {
         val metadata = Metadata(UUID.randomUUID().toString())
-        val operationTerm = krandom<Long>()
-        val nextOperationTerm = operationTerm + 1
+        val operationTerm = krandom<Term>()
+        val nextOperationTerm = operationTerm.incremented()
 
         metadata.updateAsFollower(operationTerm)
         metadata.updateAsFollower(nextOperationTerm)
@@ -124,12 +124,12 @@ internal class MetadataTest {
     @Test
     fun `should increment term when updating as candidate`() {
         val metadata = Metadata(UUID.randomUUID().toString())
-        val operationTerm = krandom<Long>()
+        val operationTerm = krandom<Term>()
 
         metadata.updateAsFollower(operationTerm)
         metadata.updateAsCandidate()
 
-        assertEquals(operationTerm + 1, metadata.consensusMetadata.currentTerm)
+        assertEquals(operationTerm.incremented(), metadata.consensusMetadata.currentTerm)
         assertEquals(NodeMode.CANDIDATE, metadata.consensusMetadata.mode)
     }
 

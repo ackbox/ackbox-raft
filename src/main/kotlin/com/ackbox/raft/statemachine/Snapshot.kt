@@ -1,13 +1,13 @@
 package com.ackbox.raft.statemachine
 
-import com.ackbox.raft.core.UNDEFINED_ID
+import com.ackbox.raft.state.Index
+import com.ackbox.raft.state.Term
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.createDirectories
-import kotlin.io.path.createFile
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.outputStream
 import kotlin.io.path.readBytes
@@ -16,7 +16,7 @@ import kotlin.io.path.readBytes
  * Data class representing a state machine's snapshot.
  */
 @OptIn(ExperimentalPathApi::class)
-data class Snapshot(val lastIncludedLogIndex: Long, val lastIncludedLogTerm: Long, val dataPath: Path) {
+data class Snapshot(val lastIncludedLogIndex: Index, val lastIncludedLogTerm: Term, val dataPath: Path) {
 
     fun save(snapshotPath: Path): Snapshot {
         snapshotPath.createDirectories()
@@ -44,8 +44,8 @@ data class Snapshot(val lastIncludedLogIndex: Long, val lastIncludedLogTerm: Lon
     private fun saveMetadata(metadataPath: Path) {
         metadataPath.outputStream().use { output ->
             val buffer = ByteBuffer.allocate(Long.SIZE_BYTES * 2)
-            buffer.putLong(lastIncludedLogIndex)
-            buffer.putLong(lastIncludedLogTerm)
+            buffer.putLong(lastIncludedLogIndex.value)
+            buffer.putLong(lastIncludedLogTerm.value)
             buffer.flip()
             output.write(buffer.array())
         }
@@ -67,14 +67,14 @@ data class Snapshot(val lastIncludedLogIndex: Long, val lastIncludedLogTerm: Lon
             return Snapshot(lastIncludedLogIndex, lastIncludedLogTerm, dataFile)
         }
 
-        private fun loadMetadata(metadataFile: Path): Pair<Long, Long> {
+        private fun loadMetadata(metadataFile: Path): Pair<Index, Term> {
             return try {
                 val buffer = ByteBuffer.wrap(metadataFile.readBytes())
                 val lastIncludedLogIndex = buffer.long
                 val lastIncludedLogTerm = buffer.long
-                Pair(lastIncludedLogIndex, lastIncludedLogTerm)
+                Pair(Index(lastIncludedLogIndex), Term(lastIncludedLogTerm))
             } catch (e: IOException) {
-                Pair(UNDEFINED_ID, UNDEFINED_ID)
+                Pair(Index.UNDEFINED, Term.UNDEFINED)
             }
         }
     }

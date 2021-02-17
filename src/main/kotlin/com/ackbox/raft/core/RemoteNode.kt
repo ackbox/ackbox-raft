@@ -10,8 +10,10 @@ import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.log.LogItem
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.networking.NamedChannel
+import com.ackbox.raft.state.Index
 import com.ackbox.raft.state.Metadata
 import com.ackbox.raft.state.RemoteNodeState
+import com.ackbox.raft.state.Term
 import com.ackbox.raft.statemachine.Snapshot
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.ReplyTermInvariantException
@@ -51,7 +53,7 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
 
             // Retrieve metadata about the log item corresponding to the last last log item present
             // in the follower node.
-            val previousLogItem = log.getItem(state.nextLogIndex - 1)
+            val previousLogItem = log.getItem(state.nextLogIndex.decremented())
             val previousLogIndex = previousLogItem?.index ?: snapshot.lastIncludedLogIndex
             val previousLogTerm = previousLogItem?.term ?: snapshot.lastIncludedLogTerm
 
@@ -70,21 +72,22 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
             }
 
             // Check whether the follower node and this node agree around leadership.
-            if (leaderTerm < reply.currentTerm) {
-                throw ReplyTermInvariantException(leaderTerm, reply.currentTerm)
+            val replyTerm = Term(reply.currentTerm)
+            if (leaderTerm < replyTerm) {
+                throw ReplyTermInvariantException(leaderTerm, replyTerm)
             }
 
             return@updateAndGet if (reply.status == AppendReply.Status.SUCCESS) {
                 // If the response from the follower is success, it means that the follower's log is caught up
                 // with leader's. It is safe to count the follower as successful entry replication.
                 logger.info("Remote [{}] is successfully caught up", channel.id)
-                state.copy(nextLogIndex = reply.lastLogIndex + 1, matchLogIndex = reply.lastLogIndex)
+                state.copy(nextLogIndex = Index(reply.lastLogIndex + 1), matchLogIndex = Index(reply.lastLogIndex))
             } else {
                 // If the response from the follower is NOT success, it means that the follower's log is caught up
                 // with leader's. We update the follower state according to its response in an attempt to
                 // fix log inconsistencies or missing entries.
                 logger.info("Remote [{}] is needs to catch up with leader", channel.id)
-                state.copy(nextLogIndex = reply.lastLogIndex + 1)
+                state.copy(nextLogIndex = Index(reply.lastLogIndex + 1))
             }
         }
     }
@@ -107,15 +110,16 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
         }
 
         // Check whether the follower node and this node agree around leadership.
-        if (candidateTerm < reply.currentTerm) {
-            throw ReplyTermInvariantException(candidateTerm, reply.currentTerm)
+        val replyTerm = Term(reply.currentTerm)
+        if (candidateTerm < replyTerm) {
+            throw ReplyTermInvariantException(candidateTerm, replyTerm)
         }
 
         // If terms are compatible, return whether the node voted for the candidate.
         return reply.status == VoteReply.Status.VOTE_GRANTED
     }
 
-    fun resetState(nextLogIndex: Long) {
+    fun resetState(nextLogIndex: Index) {
         remoteState.updateAndGet { state -> state.copy(nextLogIndex = nextLogIndex) }
     }
 
@@ -152,28 +156,28 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
 
     private fun createAppendRequest(
         metadata: Metadata,
-        previousLogIndex: Long,
-        previousLogTerm: Long,
+        previousLogIndex: Index,
+        previousLogTerm: Term,
         items: List<LogItem>
     ): AppendRequest {
         return AppendRequest.newBuilder()
             .setTimestamp(clock.millis())
             .setLeaderId(metadata.consensusMetadata.leaderId)
-            .setLeaderTerm(metadata.consensusMetadata.currentTerm)
-            .setLeaderCommitIndex(metadata.commitMetadata.commitIndex)
-            .setPreviousLogIndex(previousLogIndex)
-            .setPreviousLogTerm(previousLogTerm)
+            .setLeaderTerm(metadata.consensusMetadata.currentTerm.value)
+            .setLeaderCommitIndex(metadata.commitMetadata.commitIndex.value)
+            .setPreviousLogIndex(previousLogIndex.value)
+            .setPreviousLogTerm(previousLogTerm.value)
             .addAllEntries(items.map { it.toEntry() })
             .build()
     }
 
-    private fun createVoteRequest(metadata: Metadata, candidateTerm: Long, lastItem: LogItem?): VoteRequest {
+    private fun createVoteRequest(metadata: Metadata, candidateTerm: Term, lastItem: LogItem?): VoteRequest {
         return VoteRequest.newBuilder()
             .setTimestamp(clock.millis())
             .setCandidateId(metadata.nodeId)
-            .setCandidateTerm(candidateTerm)
-            .setLastLogTerm(lastItem?.term ?: UNDEFINED_ID)
-            .setLastLogIndex(lastItem?.index ?: UNDEFINED_ID)
+            .setCandidateTerm(candidateTerm.value)
+            .setLastLogTerm(lastItem?.term?.value ?: UNDEFINED_ID)
+            .setLastLogIndex(lastItem?.index?.value ?: UNDEFINED_ID)
             .build()
     }
 
@@ -184,13 +188,13 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
 
     private fun retrieveItems(snapshot: RemoteNodeState, log: ReplicatedLog): List<LogItem> {
         val nextLogIndex = snapshot.nextLogIndex
-        return (nextLogIndex..log.getLastItemIndex()).mapNotNull { log.getItem(it) }
+        return (nextLogIndex.value..log.getLastItemIndex().value).mapNotNull { log.getItem(Index(it)) }
     }
 
     private fun LogItem.toEntry(): AppendRequest.Entry {
         return AppendRequest.Entry.newBuilder()
-            .setIndex(index)
-            .setTerm(term)
+            .setIndex(index.value)
+            .setTerm(term.value)
             .setEntry(ByteString.copyFrom(value))
             .build()
     }

@@ -3,6 +3,7 @@ package com.ackbox.raft.log
 import com.ackbox.raft.log.LogItemSerializer.HEADER_CRC_SIZE_BYTES
 import com.ackbox.raft.log.LogItemSerializer.HEADER_ITEM_SIZE_BYTES
 import com.ackbox.raft.log.LogItemSerializer.HEADER_SIZE_BYTES
+import com.ackbox.raft.state.Index
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
@@ -10,7 +11,7 @@ import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 import java.util.zip.CRC32
 
-data class Segment(val firstItemIndex: Long, private val path: Path, private val maxSizeInBytes: Int) {
+data class Segment(val firstItemIndex: Index, private val path: Path, private val maxSizeInBytes: Int) {
 
     private var channel: FileChannel? = null
     private var offsetInBytes: Long = 0
@@ -20,12 +21,12 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
      * Index of last item stored in the segment. Segment is created without any entries.
      * At first last item index is set to [firstItemIndex - 1]
      */
-    var lastItemIndex: Long = firstItemIndex - 1
+    var lastItemIndex: Index = firstItemIndex.decremented()
         private set
 
     fun canFit(item: LogItem): Boolean = isOpen() && offsetInBytes + item.getSizeInBytes() <= maxSizeInBytes
 
-    fun isEmpty(): Boolean = lastItemIndex - firstItemIndex < 0
+    fun isEmpty(): Boolean = lastItemIndex - firstItemIndex < Index(0)
 
     fun append(item: LogItem) {
         ensureSegmentOpen()
@@ -36,11 +37,11 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
         offsetInBytes = channel?.position() ?: 0
     }
 
-    fun get(index: Long): LogItem? {
+    fun get(index: Index): LogItem? {
         return getEntry(index)?.item
     }
 
-    fun truncateAt(index: Long) {
+    fun truncateAt(index: Index) {
         ensureSegmentOpen()
         val entry = getEntry(index)
         entry?.let {
@@ -48,7 +49,7 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
             // list as they will be automatically overwritten in subsequent operations.
             channel?.truncate(it.byteOffset)
             offsetInBytes = it.byteOffset
-            lastItemIndex = index - 1
+            lastItemIndex = index.decremented()
         }
     }
 
@@ -82,8 +83,6 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
         return this
     }
 
-    fun isOpen(): Boolean = channel != null
-
     fun describe(): String {
         return items.joinToString("") { item -> "\nSegment item [${item}]" }
     }
@@ -97,10 +96,10 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
         return "Segment range=[$firstItemIndex]::[$lastItemIndex] size=[${items.size}] status=[$status]"
     }
 
-    private fun getEntry(index: Long): SegmentEntry? {
+    private fun getEntry(index: Index): SegmentEntry? {
         check(index >= firstItemIndex) { "Index [$index] must be greater or equal to firstIndex=[$firstItemIndex]" }
         val adjustedIndex = index - firstItemIndex
-        return items.getOrNull(adjustedIndex.toInt())
+        return items.getOrNull(adjustedIndex.value.toInt())
     }
 
     private fun createChannel(): FileChannel {
@@ -114,12 +113,15 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
 
     private fun createPath(): Path = Paths.get(path.toString(), getFilename())
 
+    private fun isOpen(): Boolean = channel != null
+
     private fun ensureSegmentOpen() {
         check(isOpen()) { "Segment [${getFilename()}] is not open" }
     }
 
     private fun ensureSequentialInvariant(item: LogItem) {
-        check(item.index == lastItemIndex + 1) { "Expected index=[${lastItemIndex + 1}] but got index=[${item.index}]" }
+        val expectedIndex = lastItemIndex.incremented()
+        check(item.index == expectedIndex) { "Expected index=[$expectedIndex] but got index=[${item.index}]" }
     }
 
     private fun computeCrc(data: ByteBuffer): Long {
@@ -159,7 +161,7 @@ data class Segment(val firstItemIndex: Long, private val path: Path, private val
         return LogItemSerializer.fromByteBuffer(itemDataBuffer)
     }
 
-    private fun getFilename(): String = "segment$SEPARATOR$firstItemIndex"
+    private fun getFilename(): String = "segment$SEPARATOR${firstItemIndex.value}"
 
     private data class SegmentEntry(
         /**
