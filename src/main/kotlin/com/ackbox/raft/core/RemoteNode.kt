@@ -2,7 +2,7 @@ package com.ackbox.raft.core
 
 import com.ackbox.raft.api.AppendReply
 import com.ackbox.raft.api.AppendRequest
-import com.ackbox.raft.api.PrivateNodeGrpcKt.PrivateNodeCoroutineStub
+import com.ackbox.raft.api.InternalNodeGrpcKt.InternalNodeCoroutineStub
 import com.ackbox.raft.api.SnapshotRequest
 import com.ackbox.raft.api.VoteReply
 import com.ackbox.raft.api.VoteRequest
@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference
 class RemoteNode(private val config: NodeConfig, private val channel: NamedChannel, private val clock: Clock) {
 
     private val logger: NodeLogger = NodeLogger.from(config.nodeId, RemoteNode::class)
-    private val remoteClient: PrivateNodeCoroutineStub = PrivateNodeCoroutineStub(channel)
+    private val remoteClient: InternalNodeCoroutineStub = InternalNodeCoroutineStub(channel)
     private val remoteState: AtomicReference<RemoteNodeState> = AtomicReference(RemoteNodeState())
 
     fun sendAppend(metadata: Metadata, log: ReplicatedLog, snapshot: Snapshot): RemoteNodeState {

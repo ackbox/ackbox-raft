@@ -1,7 +1,7 @@
 package simple
 
 import com.ackbox.raft.Raft
-import com.ackbox.raft.api.PublicNodeGrpc
+import com.ackbox.raft.api.ExternalNodeGrpc
 import com.ackbox.raft.api.SetRequest
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.networking.NodeNetAddress
@@ -28,7 +28,7 @@ object Configuration {
 
 class LoopNode(private val config: NodeConfig) {
 
-    private val api = PublicNodeGrpc.newBlockingStub(config.local.toChannel())
+    private val api = ExternalNodeGrpc.newBlockingStub(config.local.toChannel())
 
     fun run() {
         val node1 = Raft.fromConfig(config)

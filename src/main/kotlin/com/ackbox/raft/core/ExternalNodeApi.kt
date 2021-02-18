@@ -1,8 +1,8 @@
 package com.ackbox.raft.core
 
+import com.ackbox.raft.api.ExternalNodeGrpcKt.ExternalNodeCoroutineImplBase
 import com.ackbox.raft.api.GetReply
 import com.ackbox.raft.api.GetRequest
-import com.ackbox.raft.api.PublicNodeGrpcKt.PublicNodeCoroutineImplBase
 import com.ackbox.raft.api.SetReply
 import com.ackbox.raft.api.SetRequest
 import com.ackbox.raft.core.LeaderNode.Get
@@ -16,11 +16,11 @@ import java.nio.ByteBuffer
 import java.time.Clock
 
 /**
- * Public Raft node API implementation. This is the API exposed to external application wanting to communicate
+ * External Raft node API implementation. This is the API exposed to external application wanting to communicate
  * with the nodes in the cluster. The main methods exposed here are "set" and "get", which will ensure entries
  * can be safely set and retrieved from nodes in the cluster.
  */
-class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : PublicNodeCoroutineImplBase() {
+class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : ExternalNodeCoroutineImplBase() {
 
     private val logger: NodeLogger = NodeLogger.from(node.nodeId, ExternalNodeApi::class)
 

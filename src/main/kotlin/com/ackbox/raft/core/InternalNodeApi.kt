@@ -2,7 +2,7 @@ package com.ackbox.raft.core
 
 import com.ackbox.raft.api.AppendReply
 import com.ackbox.raft.api.AppendRequest
-import com.ackbox.raft.api.PrivateNodeGrpcKt.PrivateNodeCoroutineImplBase
+import com.ackbox.raft.api.InternalNodeGrpcKt.InternalNodeCoroutineImplBase
 import com.ackbox.raft.api.SnapshotReply
 import com.ackbox.raft.api.SnapshotRequest
 import com.ackbox.raft.api.VoteReply
@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Internal Raft node API implementation. The behavior implemented here follows the original paper.
  */
-class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) : PrivateNodeCoroutineImplBase() {
+class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) : InternalNodeCoroutineImplBase() {
 
     private val logger: NodeLogger = NodeLogger.from(node.nodeId, InternalNodeApi::class)
     private val processingSnapshot: AtomicBoolean = AtomicBoolean(false)

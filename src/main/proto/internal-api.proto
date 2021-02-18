@@ -2,22 +2,13 @@ syntax = "proto3";
 
 option java_multiple_files = true;
 option java_package = "com.ackbox.raft.api";
-option java_outer_classname = "RaftApiProto";
+option java_outer_classname = "RaftInternalApiProto";
 option objc_class_prefix = "API";
 
 package com.ackbox.raft;
 
-// The public node service definition.
-service PublicNode {
-  // Store new entries across nodes in the cluster.
-  rpc set (SetRequest) returns (SetReply) {}
-
-  // Retrieve entries stored across nodes in the cluster.
-  rpc get (GetRequest) returns (GetReply) {}
-}
-
 // The internal node service definition.
-service PrivateNode {
+service InternalNode {
   // Start an election for a given term.
   rpc handleVote (VoteRequest) returns (VoteReply) {}
 
@@ -26,77 +17,6 @@ service PrivateNode {
 
   // Install a snapshot to state machine.
   rpc handleSnapshot (stream SnapshotRequest) returns (SnapshotReply) {}
-}
-
-// Set replicated entry request message.
-message SetRequest {
-  // Request timestamp (wall clock from issuer).
-  int64 timestamp = 1;
-
-  // Data to be replicated across nodes.
-  bytes entry = 2;
-}
-
-// Set replicated entry response message.
-message SetReply {
-  // Possible status for a set request.
-  // - SUCCESS: leader node was able to append and commit entries.
-  // - NOT_LEADER: request was sent to a node that is not the leader.
-  // - COMMIT_ERROR: leader had issues committing the entries.
-  // - PROCESSING: if node is busy processing previous requests.
-  // - UNKNOWN: if mode is failed with unknown reason.
-  enum Status {
-    SUCCESS = 0;
-    NOT_LEADER = 1;
-    COMMIT_ERROR = 2;
-    PROCESSING = 3;
-    UNKNOWN = 4;
-  }
-
-  // Response timestamp (wall clock from issuer).
-  int64 timestamp = 1;
-
-  // Leader's unique identifier so follower can redirect clients.
-  string leaderId = 2;
-
-  // Status code for the response.
-  Status status = 4;
-}
-
-// Get replicated entry request message.
-message GetRequest {
-  // Request timestamp (wall clock from issuer).
-  int64 timestamp = 1;
-
-  // Sequence number assigned to the entry.
-  string key = 2;
-}
-
-// Get replicated entry response message.
-message GetReply {
-  // Possible status for a set request.
-  // - SUCCESS: leader node was able retrieve entries.
-  // - NOT_LEADER: request was sent to a node that is not the leader.
-  // - PROCESSING: if node is busy processing previous requests.
-  // - UNKNOWN: if node is failed with unknown reason.
-  enum Status {
-    SUCCESS = 0;
-    NOT_LEADER = 1;
-    PROCESSING = 2;
-    UNKNOWN = 3;
-  }
-
-  // Response timestamp (wall clock from issuer).
-  int64 timestamp = 1;
-
-  // Leader's unique identifier so follower can redirect clients.
-  string leaderId = 2;
-
-  // Data to be replicated across nodes.
-  bytes entry = 3;
-
-  // Status code for the response.
-  Status status = 4;
 }
 
 // The vote request message.
