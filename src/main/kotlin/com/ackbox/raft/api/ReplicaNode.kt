@@ -1,8 +1,8 @@
-package com.ackbox.raft.core
+package com.ackbox.raft.api
 
-import com.ackbox.raft.log.LogItem
-import com.ackbox.raft.state.Index
-import com.ackbox.raft.state.Term
+import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.Term
 import kotlinx.coroutines.flow.Flow
 import java.nio.ByteBuffer
 

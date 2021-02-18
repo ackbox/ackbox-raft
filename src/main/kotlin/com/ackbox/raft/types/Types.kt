@@ -1,6 +1,5 @@
-package com.ackbox.raft.state
+package com.ackbox.raft.types
 
-import com.ackbox.raft.core.UNDEFINED_ID
 import kotlin.math.max
 import kotlin.math.min
 

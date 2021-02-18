@@ -1,8 +1,8 @@
 package com.ackbox.raft
 
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.core.ExternalNodeApi
-import com.ackbox.raft.core.InternalNodeApi
+import com.ackbox.raft.api.ExternalNodeApi
+import com.ackbox.raft.api.InternalNodeApi
 import com.ackbox.raft.core.LocalNode
 import com.ackbox.raft.core.RemoteNodes
 import com.ackbox.raft.networking.NodeNetworking

@@ -1,10 +1,6 @@
-package com.ackbox.raft.core
+package com.ackbox.raft.api
 
-import com.ackbox.raft.api.GetReply
-import com.ackbox.raft.api.GetRequest
-import com.ackbox.raft.api.SetReply
-import com.ackbox.raft.api.SetRequest
-import com.ackbox.raft.state.Index
+import com.ackbox.raft.types.Index
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NotLeaderException

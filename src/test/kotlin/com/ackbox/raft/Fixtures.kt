@@ -1,8 +1,8 @@
 package com.ackbox.raft
 
-import com.ackbox.raft.log.LogItem
-import com.ackbox.raft.state.Index
-import com.ackbox.raft.state.Term
+import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.Term
 import com.ackbox.random.krandom
 import com.google.common.primitives.Longs
 

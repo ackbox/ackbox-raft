@@ -1,4 +1,4 @@
-package com.ackbox.raft.state
+package com.ackbox.raft.types
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test

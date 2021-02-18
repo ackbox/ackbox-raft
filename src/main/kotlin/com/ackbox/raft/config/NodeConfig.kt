@@ -1,14 +1,14 @@
 package com.ackbox.raft.config
 
-import com.ackbox.raft.core.DATA_BASE_FOLDER
-import com.ackbox.raft.core.HEARTBEAT_DELAY_RATIO
-import com.ackbox.raft.core.LOG_SEGMENT_SIZE_IN_BYTES
-import com.ackbox.raft.core.MAX_ELECTION_TIMER_MS
-import com.ackbox.raft.core.MIN_ELECTION_TIMER_MS
-import com.ackbox.raft.core.REMOTE_TIMEOUT
-import com.ackbox.raft.core.Randoms
-import com.ackbox.raft.core.SNAPSHOT_DELAY
-import com.ackbox.raft.core.STATE_LOCK_WAIT_TIMEOUT
+import com.ackbox.raft.types.DATA_BASE_FOLDER
+import com.ackbox.raft.types.HEARTBEAT_DELAY_RATIO
+import com.ackbox.raft.types.LOG_SEGMENT_SIZE_IN_BYTES
+import com.ackbox.raft.types.MAX_ELECTION_TIMER_MS
+import com.ackbox.raft.types.MIN_ELECTION_TIMER_MS
+import com.ackbox.raft.types.REMOTE_TIMEOUT
+import com.ackbox.raft.types.Randoms
+import com.ackbox.raft.types.SNAPSHOT_DELAY
+import com.ackbox.raft.types.STATE_LOCK_WAIT_TIMEOUT
 import com.ackbox.raft.networking.NodeAddress
 import java.nio.file.Path
 import java.nio.file.Paths

@@ -1,7 +1,6 @@
-package com.ackbox.raft.state
+package com.ackbox.raft.types
 
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.log.LogItem
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.log.SegmentedLog
 import com.ackbox.raft.statemachine.KeyValueStore

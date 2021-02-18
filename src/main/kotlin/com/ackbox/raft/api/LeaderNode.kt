@@ -1,4 +1,4 @@
-package com.ackbox.raft.core
+package com.ackbox.raft.api
 
 import java.nio.ByteBuffer
 

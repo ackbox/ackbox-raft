@@ -1,6 +1,4 @@
-package com.ackbox.raft.state
-
-import com.ackbox.raft.core.UNDEFINED_ID
+package com.ackbox.raft.types
 
 data class RemoteNodeState(
     /**

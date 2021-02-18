@@ -1,15 +1,9 @@
-package com.ackbox.raft.core
+package com.ackbox.raft.api
 
-import com.ackbox.raft.api.AppendReply
-import com.ackbox.raft.api.AppendRequest
 import com.ackbox.raft.api.InternalNodeGrpcKt.InternalNodeCoroutineImplBase
-import com.ackbox.raft.api.SnapshotReply
-import com.ackbox.raft.api.SnapshotRequest
-import com.ackbox.raft.api.VoteReply
-import com.ackbox.raft.api.VoteRequest
-import com.ackbox.raft.log.LogItem
-import com.ackbox.raft.state.Index
-import com.ackbox.raft.state.Term
+import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.Term
 import com.ackbox.raft.support.LeaderMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger

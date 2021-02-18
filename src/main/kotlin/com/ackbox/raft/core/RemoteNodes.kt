@@ -4,9 +4,9 @@ import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.networking.NamedChannel
 import com.ackbox.raft.networking.NodeNetworking
-import com.ackbox.raft.state.Index
-import com.ackbox.raft.state.Metadata
-import com.ackbox.raft.state.RemoteNodeState
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.Metadata
+import com.ackbox.raft.types.RemoteNodeState
 import com.ackbox.raft.statemachine.Snapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async

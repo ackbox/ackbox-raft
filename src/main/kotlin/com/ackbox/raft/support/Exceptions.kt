@@ -1,7 +1,7 @@
 package com.ackbox.raft.support
 
-import com.ackbox.raft.state.Index
-import com.ackbox.raft.state.Term
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.Term
 
 /**
  * Exception for the case where current term does not match the term from a remote peer/node.

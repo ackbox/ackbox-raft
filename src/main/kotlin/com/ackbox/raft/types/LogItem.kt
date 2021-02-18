@@ -1,7 +1,4 @@
-package com.ackbox.raft.log
-
-import com.ackbox.raft.state.Index
-import com.ackbox.raft.state.Term
+package com.ackbox.raft.types
 
 /**
  * Data class representing a log item.

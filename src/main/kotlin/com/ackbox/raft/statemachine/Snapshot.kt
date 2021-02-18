@@ -1,7 +1,7 @@
 package com.ackbox.raft.statemachine
 
-import com.ackbox.raft.state.Index
-import com.ackbox.raft.state.Term
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.Term
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.file.Path

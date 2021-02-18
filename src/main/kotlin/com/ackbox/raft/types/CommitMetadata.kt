@@ -1,4 +1,4 @@
-package com.ackbox.raft.state
+package com.ackbox.raft.types
 
 data class CommitMetadata(
     /**

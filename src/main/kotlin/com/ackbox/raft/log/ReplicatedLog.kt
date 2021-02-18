@@ -1,7 +1,8 @@
 package com.ackbox.raft.log
 
-import com.ackbox.raft.state.Index
-import com.ackbox.raft.state.Term
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Term
 import org.slf4j.LoggerFactory
 
 /**

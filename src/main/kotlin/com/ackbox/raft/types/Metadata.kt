@@ -1,4 +1,4 @@
-package com.ackbox.raft.state
+package com.ackbox.raft.types
 
 import com.ackbox.raft.networking.NodeNetworking
 import com.ackbox.raft.support.NodeLogger

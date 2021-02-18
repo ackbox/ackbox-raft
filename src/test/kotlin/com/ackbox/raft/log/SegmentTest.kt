@@ -1,8 +1,9 @@
 package com.ackbox.raft.log
 
 import com.ackbox.raft.Fixtures
-import com.ackbox.raft.core.Randoms
-import com.ackbox.raft.state.Index
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Randoms
 import com.ackbox.raft.use
 import com.ackbox.random.krandom
 import com.google.common.primitives.Longs

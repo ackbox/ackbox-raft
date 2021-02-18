@@ -3,7 +3,8 @@ package com.ackbox.raft.log
 import com.ackbox.raft.log.LogItemSerializer.HEADER_CRC_SIZE_BYTES
 import com.ackbox.raft.log.LogItemSerializer.HEADER_ITEM_SIZE_BYTES
 import com.ackbox.raft.log.LogItemSerializer.HEADER_SIZE_BYTES
-import com.ackbox.raft.state.Index
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.LogItem
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path

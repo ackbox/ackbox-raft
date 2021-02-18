@@ -1,8 +1,9 @@
 package com.ackbox.raft.log
 
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.state.Index
+import com.ackbox.raft.types.Index
 import com.ackbox.raft.support.NodeLogger
+import com.ackbox.raft.types.LogItem
 import com.google.common.annotations.VisibleForTesting
 import java.nio.file.Files
 import java.nio.file.Path

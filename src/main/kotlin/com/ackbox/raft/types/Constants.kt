@@ -1,4 +1,4 @@
-package com.ackbox.raft.core
+package com.ackbox.raft.types
 
 import java.nio.file.Paths
 import java.time.Duration
