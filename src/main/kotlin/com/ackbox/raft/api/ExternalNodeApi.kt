@@ -1,8 +1,8 @@
 package com.ackbox.raft.api
 
 import com.ackbox.raft.api.ExternalNodeGrpcKt.ExternalNodeCoroutineImplBase
-import com.ackbox.raft.api.LeaderNode.Get
-import com.ackbox.raft.api.LeaderNode.Set
+import com.ackbox.raft.api.LeaderNode.GetItem
+import com.ackbox.raft.api.LeaderNode.SetItem
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger
@@ -12,80 +12,80 @@ import java.nio.ByteBuffer
 import java.time.Clock
 
 /**
- * External Raft node API implementation. This is the API exposed to external application wanting to communicate
- * with the nodes in the cluster. The main methods exposed here are "set" and "get", which will ensure entries
- * can be safely set and retrieved from nodes in the cluster.
+ * External Raft node API implementation. This is the API exposed to external application wanting to communicate with
+ * the nodes in the cluster. The main methods exposed here are "set" and "get", which will ensure entries can be safely
+ * set and retrieved from nodes in the cluster.
  */
 class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : ExternalNodeCoroutineImplBase() {
 
     private val logger: NodeLogger = NodeLogger.from(node.nodeId, ExternalNodeApi::class)
 
-    override suspend fun set(request: SetRequest): SetReply {
-        logger.debug("Received SET request [{}]", request)
+    override suspend fun setEntry(request: SetEntryRequest): SetEntryReply {
+        logger.debug("Received set entry request [{}]", request)
         return try {
-            val input = Set.Input(listOf(request.entry.toByteArray()))
+            val input = SetItem.Input(listOf(request.entry.toByteArray()))
             val output = node.setItem(input)
-            createSuccessSetReply(output.leaderId)
+            createSuccessSetEntryReply(output.leaderId)
         } catch (e: NotLeaderException) {
-            logger.warn("Received SET request while not leader", e.knownLeaderId, e)
-            createFailureSetReply(e.knownLeaderId, SetReply.Status.NOT_LEADER)
+            logger.warn("Received set entry request while not leader=[{}]", e.knownLeaderId, e)
+            createFailureSetEntryReply(e.knownLeaderId, SetEntryReply.Status.NOT_LEADER)
         } catch (e: CommitIndexMismatchException) {
-            logger.warn("Commit index mismatch for SET request", e)
-            createFailureSetReply(e.leaderId, SetReply.Status.COMMIT_ERROR)
+            logger.warn("Commit index mismatch for set entry request", e)
+            createFailureSetEntryReply(e.leaderId, SetEntryReply.Status.COMMIT_ERROR)
         } catch (e: LockNotAcquiredException) {
             logger.warn("Unable to complete request since node is busy", e)
-            createFailureSetReply(null, SetReply.Status.PROCESSING)
+            createFailureSetEntryReply(null, SetEntryReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureSetReply(null, SetReply.Status.UNKNOWN)
+            createFailureSetEntryReply(null, SetEntryReply.Status.UNKNOWN)
         }
     }
 
-    override suspend fun get(request: GetRequest): GetReply {
-        logger.debug("Received GET request [{}]", request)
+    override suspend fun getEntry(request: GetEntryRequest): GetEntryReply {
+        logger.debug("Received get entry request [{}]", request)
         return try {
-            val input = Get.Input(request.key)
+            val input = GetItem.Input(request.key)
             val output = node.getItem(input)
-            createSuccessGetReply(output.leaderId, output.data)
+            createSuccessGetEntryReply(output.leaderId, output.data)
         } catch (e: NotLeaderException) {
-            logger.warn("Received GET request while not leader", e.knownLeaderId, e)
-            createFailureGetReply(e.knownLeaderId, GetReply.Status.NOT_LEADER)
+            logger.warn("Received get entry request while not leader=[{}]", e.knownLeaderId, e)
+            createFailureGetEntryReply(e.knownLeaderId, GetEntryReply.Status.NOT_LEADER)
         } catch (e: LockNotAcquiredException) {
             logger.warn("Unable to complete request since node is busy", e)
-            createFailureGetReply(null, GetReply.Status.PROCESSING)
+            createFailureGetEntryReply(null, GetEntryReply.Status.PROCESSING)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
-            createFailureGetReply(null, GetReply.Status.UNKNOWN)
+            createFailureGetEntryReply(null, GetEntryReply.Status.UNKNOWN)
         }
     }
 
-    private fun createSuccessSetReply(leaderId: String?): SetReply {
-        return SetReply.newBuilder().apply {
+    private fun createSuccessSetEntryReply(leaderId: String?): SetEntryReply {
+        return SetEntryReply.newBuilder().apply {
             this.timestamp = clock.millis()
             leaderId?.let { this.leaderId = it }
-            this.status = SetReply.Status.SUCCESS
+            this.status = SetEntryReply.Status.SUCCESS
         }.build()
     }
 
-    private fun createFailureSetReply(leaderId: String?, status: SetReply.Status): SetReply {
-        return SetReply.newBuilder().apply {
+    private fun createFailureSetEntryReply(leaderId: String?, status: SetEntryReply.Status): SetEntryReply {
+        return SetEntryReply.newBuilder().apply {
             this.timestamp = clock.millis()
             leaderId?.let { this.leaderId = it }
             this.status = status
         }.build()
     }
 
-    private fun createSuccessGetReply(leaderId: String?, data: ByteBuffer?): GetReply {
-        return GetReply.newBuilder().apply {
+    private fun createSuccessGetEntryReply(leaderId: String?, data: ByteBuffer?): GetEntryReply {
+        return GetEntryReply.newBuilder().apply {
             this.timestamp = clock.millis()
             leaderId?.let { this.leaderId = it }
             this.entry = data?.let { ByteString.copyFrom(it) }
-            this.status = GetReply.Status.SUCCESS
+            this.status = GetEntryReply.Status.SUCCESS
         }.build()
     }
 
-    private fun createFailureGetReply(leaderId: String?, status: GetReply.Status): GetReply {
-        return GetReply.newBuilder().apply {
+    private fun createFailureGetEntryReply(leaderId: String?, status: GetEntryReply.Status): GetEntryReply {
+        return GetEntryReply.newBuilder().apply {
             this.timestamp = clock.millis()
             leaderId?.let { this.leaderId = it }
             this.status = status

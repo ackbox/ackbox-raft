@@ -27,6 +27,8 @@ const val REQUEST_VOTE_OPERATION: String = "RequestVoteOperation"
 const val REQUEST_APPEND_OPERATION: String = "RequestAppendOperation"
 const val REQUEST_RETRIEVE_OPERATION: String = "RequestRetrieveOperation"
 const val REQUEST_SNAPSHOT_OPERATION: String = "RequestSnapshotOperation"
+const val REQUEST_ADD_NODE_OPERATION: String = "RequestAddNodeOperation"
+const val REQUEST_REMOVE_NODE_OPERATION: String = "RequestRemoveNodeOperation"
 
 object Randoms {
 

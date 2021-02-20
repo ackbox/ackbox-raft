@@ -24,7 +24,7 @@ internal class ExternalNodeApiTest {
     @Test
     fun `should success set request`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
-        val output = LeaderNode.Set.Output(LEADER_ID)
+        val output = LeaderNode.SetItem.Output(LEADER_ID)
 
         whenever(node.setItem(any())).thenReturn(output)
 
@@ -85,7 +85,7 @@ internal class ExternalNodeApiTest {
     @Test
     fun `should success get request`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
-        val output = LeaderNode.Get.Output(LEADER_ID, DATA)
+        val output = LeaderNode.GetItem.Output(LEADER_ID, DATA)
 
         whenever(node.getItem(any())).thenReturn(output)
 

@@ -42,13 +42,15 @@ message VoteReply {
   // Possible status for a vote request.
   // - VOTE_GRANTED: if node granted the vote to the candidate.
   // - VOTE_NOT_GRANTED: if node did NOT grant the vote to the candidate.
+  // - NODE_NOT_KNOWN: if follower received a request from a node that is not known.
   // - PROCESSING: if follower is busy processing previous requests.
   // - UNKNOWN: if follower is failed with unknown reason.
   enum Status {
     VOTE_GRANTED = 0;
     VOTE_NOT_GRANTED = 1;
-    PROCESSING = 2;
-    UNKNOWN = 3;
+    NODE_NOT_KNOWN = 2;
+    PROCESSING = 3;
+    UNKNOWN = 4;
   }
 
   // Response timestamp (wall clock from issuer).
@@ -98,6 +100,7 @@ message AppendReply {
   // - SUCCESS: if follower was able to successfully append the log entries.
   // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster.
   // - TERM_MISMATCH: if follower's term does not agree with issuer of the request.
+  // - NODE_NOT_KNOWN: if follower received a request from a node that is not known.
   // - PROCESSING: if follower is busy processing previous requests.
   // - UNKNOWN: if follower is failed with unknown reason.
   enum Status {
@@ -105,8 +108,9 @@ message AppendReply {
     LEADER_MISMATCH = 1;
     TERM_MISMATCH = 2;
     LOG_STATE_MISMATCH = 3;
-    PROCESSING = 4;
-    UNKNOWN = 5;
+    NODE_NOT_KNOWN = 4;
+    PROCESSING = 5;
+    UNKNOWN = 6;
   }
   // Response timestamp (wall clock from issuer).
   int64 timestamp = 1;
@@ -148,14 +152,16 @@ message SnapshotReply {
   // - SUCCESS: follower was able to install the snapshot successfully.
   // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster.
   // - TERM_MISMATCH: if follower's term does not agree with issuer of the request.
+  // - NODE_NOT_KNOWN: if follower received a request from a node that is not known.
   // - PROCESSING: if follower is busy processing previous requests.
   // - UNKNOWN: if follower is failed with unknown reason.
   enum Status {
     SUCCESS = 0;
     LEADER_MISMATCH = 1;
     TERM_MISMATCH = 2;
-    PROCESSING = 3;
-    UNKNOWN = 4;
+    NODE_NOT_KNOWN = 3;
+    PROCESSING = 4;
+    UNKNOWN = 5;
   }
 
   // Response timestamp (wall clock from issuer).

@@ -26,10 +26,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import java.time.Clock
 import java.util.concurrent.atomic.AtomicReference
+import javax.annotation.concurrent.ThreadSafe
 
-class RemoteNode(private val config: NodeConfig, private val channel: NamedChannel, private val clock: Clock) {
+@ThreadSafe
+class RemoteNode(private val config: NodeConfig, val channel: NamedChannel) {
 
     private val logger: NodeLogger = NodeLogger.from(config.nodeId, RemoteNode::class)
     private val remoteClient: InternalNodeCoroutineStub = InternalNodeCoroutineStub(channel)
@@ -44,8 +45,8 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
             // (meaning that the leader trimmed its log beyond [state.nextLogIndex]), the leader will
             // send a snapshot to the follower. This operation replaces the append entry.
             if (state.nextLogIndex < log.getFirstItemIndex()) {
-                logger.info("Sending snapshot to remote=[{}] instead", channel.id)
-                sendSnapshotAsync(snapshot)
+                logger.info("Sending snapshot to remote [{}] instead", channel.id)
+                enqueueSendSnapshot(snapshot)
                 return@updateAndGet state
             }
 
@@ -120,33 +121,41 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
         return reply.status == VoteReply.Status.VOTE_GRANTED
     }
 
+    fun sendSnapshot(snapshot: Snapshot) {
+        // Do not use RPC timeout since snapshot transfers can be arbitrary long.
+        runBlocking { sendSnapshotAsync(snapshot) }
+    }
+
     fun resetState(nextLogIndex: Index) {
         remoteState.updateAndGet { state -> state.copy(nextLogIndex = nextLogIndex) }
     }
 
-    private fun sendSnapshotAsync(snapshot: Snapshot) {
+    @Suppress("BlockingMethodInNonBlockingContext")
+    private suspend fun sendSnapshotAsync(snapshot: Snapshot) {
+        logger.info("Sending snapshot to remote [{}]", channel.id)
+        val snapshotFile = snapshot.dataPath.toFile()
+        if (!snapshotFile.exists()) {
+            logger.warn("Skipping snapshot to remote [{}] since no data file was found", channel.id)
+            return
+        }
+        var size: Int
+        val buffer = ByteArray(BUFFER_SIZE_IN_BYTES)
+        val request = flow<SnapshotRequest> {
+            snapshotFile.inputStream().use { input ->
+                while (input.read(buffer).also { size = it } > 0) {
+                    emit(createSnapshotRequest(buffer, size))
+                }
+            }
+        }
+        remoteClient.handleSnapshot(request)
+    }
+
+    private fun enqueueSendSnapshot(snapshot: Snapshot) {
         // Asynchronously collect and send snapshot to follower. This operation is
         // non-blocking and executed in a different scope. The code will return
         // the current remote state so that the leader can continue processing.
         // The behavior here follows a fire-and-forget semantics.
-        GlobalScope.launch(Dispatchers.IO) {
-            logger.info("Sending snapshot to remote [{}]", channel.id)
-            val snapshotFile = snapshot.dataPath.toFile()
-            if (!snapshotFile.exists()) {
-                logger.warn("Skipping snapshot to remote [{}] since no data file was found", channel.id)
-                return@launch
-            }
-            var size: Int
-            val buffer = ByteArray(BUFFER_SIZE_IN_BYTES)
-            val request = flow<SnapshotRequest> {
-                snapshotFile.inputStream().use { input ->
-                    while (input.read(buffer).also { size = it } > 0) {
-                        emit(createSnapshotRequest(buffer, size))
-                    }
-                }
-            }
-            remoteClient.handleSnapshot(request)
-        }.invokeOnCompletion { cause ->
+        GlobalScope.launch(Dispatchers.IO) { sendSnapshotAsync(snapshot) }.invokeOnCompletion { cause ->
             if (cause != null) {
                 logger.warn("Error while sending snapshot to remote [{}]", channel.id, cause)
             } else {
@@ -162,7 +171,7 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
         items: List<LogItem>
     ): AppendRequest {
         return AppendRequest.newBuilder()
-            .setTimestamp(clock.millis())
+            .setTimestamp(config.clock.millis())
             .setLeaderId(metadata.consensusMetadata.leaderId)
             .setLeaderTerm(metadata.consensusMetadata.currentTerm.value)
             .setLeaderCommitIndex(metadata.commitMetadata.commitIndex.value)
@@ -174,7 +183,7 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
 
     private fun createVoteRequest(metadata: Metadata, candidateTerm: Term, lastItem: LogItem?): VoteRequest {
         return VoteRequest.newBuilder()
-            .setTimestamp(clock.millis())
+            .setTimestamp(config.clock.millis())
             .setCandidateId(metadata.nodeId)
             .setCandidateTerm(candidateTerm.value)
             .setLastLogTerm(lastItem?.term?.value ?: UNDEFINED_ID)
@@ -183,7 +192,7 @@ class RemoteNode(private val config: NodeConfig, private val channel: NamedChann
     }
 
     private fun createSnapshotRequest(buffer: ByteArray, size: Int) = SnapshotRequest.newBuilder()
-        .setTimestamp(clock.millis())
+        .setTimestamp(config.clock.millis())
         .setData(ByteString.copyFrom(buffer, 0, size))
         .build()
 

@@ -34,8 +34,8 @@ class VoteNotGrantedException(candidateId: String, val term: Term) :
     NonRetryableException("Replica cannot vote for candidate: candidate=[$candidateId] and term=[$term]")
 
 /**
- * Exception for the case where a node receive a request that can only be handled by the leader,
- * but its mode is follower or candidate.
+ * Exception for the case where a node receive a request that can only be handled by the leader, but its mode is
+ * follower or candidate.
  */
 class NotLeaderException(val knownLeaderId: String?) :
     RetryableException("Node is not the leader - known leaderId=[$knownLeaderId]")
@@ -47,10 +47,16 @@ class CommitIndexMismatchException(val leaderId: String?, desiredCommitIndex: In
     NonRetryableException("Unable to reach consensus on commit index - desired=[$desiredCommitIndex] and actual=[$actualCommitIndex]")
 
 /**
- * Exception for the case where the node was unable to acquire the lock in order to safely modify its state.
- * It is safe for requests to be retried upon reception of this exception.
+ * Exception for the case where the node was unable to acquire the lock in order to safely modify its state. It is safe
+ * for requests to be retried upon reception of this exception.
  */
 class LockNotAcquiredException : RetryableException("Unable to acquire state lock")
+
+/**
+ * Exception for the case where a request is received from a node that is not known by the recipient node.
+ */
+class UnknownNodeException(issuedNodeId: String) :
+    RetryableException("Request received from unknown nodeId=[$issuedNodeId]")
 
 /**
  * Exception for transient failures. Callers can retry upon receiving this exception.

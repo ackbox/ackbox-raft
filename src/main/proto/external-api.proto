@@ -10,14 +10,14 @@ package com.ackbox.raft;
 // The external node service definition.
 service ExternalNode {
   // Store new entries across nodes in the cluster.
-  rpc set (SetRequest) returns (SetReply) {}
+  rpc setEntry (SetEntryRequest) returns (SetEntryReply) {}
 
   // Retrieve entries stored across nodes in the cluster.
-  rpc get (GetRequest) returns (GetReply) {}
+  rpc getEntry (GetEntryRequest) returns (GetEntryReply) {}
 }
 
 // Set replicated entry request message.
-message SetRequest {
+message SetEntryRequest {
   // Request timestamp (wall clock from issuer).
   int64 timestamp = 1;
 
@@ -26,7 +26,7 @@ message SetRequest {
 }
 
 // Set replicated entry response message.
-message SetReply {
+message SetEntryReply {
   // Possible status for a set request.
   // - SUCCESS: leader node was able to append and commit entries.
   // - NOT_LEADER: request was sent to a node that is not the leader.
@@ -52,7 +52,7 @@ message SetReply {
 }
 
 // Get replicated entry request message.
-message GetRequest {
+message GetEntryRequest {
   // Request timestamp (wall clock from issuer).
   int64 timestamp = 1;
 
@@ -61,7 +61,7 @@ message GetRequest {
 }
 
 // Get replicated entry response message.
-message GetReply {
+message GetEntryReply {
   // Possible status for a set request.
   // - SUCCESS: leader node was able retrieve entries.
   // - NOT_LEADER: request was sent to a node that is not the leader.

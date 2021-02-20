@@ -1,15 +1,16 @@
 package com.ackbox.raft.api
 
 import com.ackbox.raft.api.InternalNodeGrpcKt.InternalNodeCoroutineImplBase
-import com.ackbox.raft.types.LogItem
-import com.ackbox.raft.types.Index
-import com.ackbox.raft.types.Term
 import com.ackbox.raft.support.LeaderMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.ReplicaStateMismatchException
 import com.ackbox.raft.support.RequestTermInvariantException
+import com.ackbox.raft.support.UnknownNodeException
 import com.ackbox.raft.support.VoteNotGrantedException
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Term
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
@@ -51,6 +52,9 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         } catch (e: LockNotAcquiredException) {
             logger.warn("Unable to complete request since node is busy", e)
             createFailureAppendReply(Term.UNDEFINED, Index.UNDEFINED, AppendReply.Status.PROCESSING)
+        } catch (e: UnknownNodeException) {
+            logger.warn("Received a request from a node that is not known", e)
+            createFailureAppendReply(Term.UNDEFINED, Index.UNDEFINED, AppendReply.Status.NODE_NOT_KNOWN)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
             val term = Term(request.leaderTerm)
@@ -79,6 +83,9 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         } catch (e: LockNotAcquiredException) {
             logger.warn("Unable to complete request since node is busy", e)
             createFailureVoteReply(Term.UNDEFINED, VoteReply.Status.PROCESSING)
+        } catch (e: UnknownNodeException) {
+            logger.warn("Received a request from a node that is not known", e)
+            createFailureVoteReply(Term(request.candidateTerm), VoteReply.Status.NODE_NOT_KNOWN)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
             createFailureVoteReply(Term(request.candidateTerm), VoteReply.Status.UNKNOWN)
@@ -112,6 +119,9 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         } catch (e: RequestTermInvariantException) {
             logger.warn("Unable to complete request due to termination invariant violation", e)
             createFailureSnapshotReply(e.term, SnapshotReply.Status.TERM_MISMATCH)
+        } catch (e: UnknownNodeException) {
+            logger.warn("Received a request from a node that is not known", e)
+            createFailureSnapshotReply(Term.UNDEFINED, SnapshotReply.Status.NODE_NOT_KNOWN)
         } catch (e: Exception) {
             logger.error("Unable to complete request due unknown error", e)
             createFailureSnapshotReply(Term.UNDEFINED, SnapshotReply.Status.UNKNOWN)
