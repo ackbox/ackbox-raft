@@ -13,6 +13,7 @@ object LogItemSerializer {
 
     fun toByteBuffer(item: LogItem): ByteBuffer {
         val buffer = ByteBuffer.allocate(item.getSizeInBytes())
+        buffer.putInt(item.type.ordinal)
         buffer.putLong(item.index.value)
         buffer.putLong(item.term.value)
         buffer.put(item.value)
@@ -21,10 +22,11 @@ object LogItemSerializer {
     }
 
     fun fromByteBuffer(buffer: ByteBuffer): LogItem {
+        val typeOrdinal = buffer.int
         val index = buffer.long
         val term = buffer.long
         val value = ByteArray(buffer.remaining())
         buffer.get(value)
-        return LogItem(Index(index), Term(term), value)
+        return LogItem(LogItem.Type.values()[typeOrdinal], Index(index), Term(term), value)
     }
 }

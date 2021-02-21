@@ -6,7 +6,9 @@ import io.grpc.ManagedChannel
 import io.grpc.MethodDescriptor
 import java.util.concurrent.TimeUnit
 
-class NamedChannel(val id: String, private val channel: ManagedChannel) : ManagedChannel() {
+class NamedChannel(val address: NodeAddress, private val channel: ManagedChannel) : ManagedChannel() {
+
+    val id: String = address.nodeId
 
     override fun authority(): String = channel.authority()
 

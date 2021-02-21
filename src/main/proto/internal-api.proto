@@ -66,10 +66,15 @@ message VoteReply {
 // The append entry request message.
 message AppendRequest {
   // Object representing a log entry.
+  enum EntryType {
+    STORE = 0;
+    NETWORKING = 1;
+  }
   message Entry {
     int64 index = 1;
     int64 term = 2;
     bytes entry = 3;
+    EntryType type = 4;
   }
 
   // Request timestamp (wall clock from issuer).

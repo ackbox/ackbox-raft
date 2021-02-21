@@ -11,6 +11,9 @@ package com.ackbox.raft;
 service ManagementNode {
   // Add a new node to the cluster.
   rpc addNode (AddNodeRequest) returns (AddNodeReply) {}
+
+  // Remove a new node to the cluster.
+  rpc removeNode (RemoveNodeRequest) returns (RemoveNodeReply) {}
 }
 
 // The add node request message.
@@ -30,6 +33,45 @@ message AddNodeRequest {
 
 // The add node response message.
 message AddNodeReply {
+  // Possible status for an add node request.
+  // - SUCCESS: if node was successfully added to the cluster.
+  // - NOT_LEADER: request was sent to a node that is not the leader.
+  // - PROCESSING: if node is busy processing previous requests.
+  // - UNKNOWN: if request failed for unknown reason.
+  enum Status {
+    SUCCESS = 0;
+    NOT_LEADER = 2;
+    PROCESSING = 3;
+    UNKNOWN = 4;
+  }
+
+  // Response timestamp (wall clock from issuer).
+  int64 timestamp = 1;
+
+  // Leader's unique identifier so follower can redirect clients.
+  string leaderId = 2;
+
+  // Response status for the vote request.
+  Status status = 3;
+}
+
+// The remove node request message.
+message RemoveNodeRequest {
+  // Request timestamp (wall clock from issuer).
+  int64 timestamp = 1;
+
+  // Node's unique identifier.
+  string nodeId = 2;
+
+  // Node's hostname or IP address.
+  string host = 3;
+
+  // Node's port.
+  int32 port = 4;
+}
+
+// The remove node response message.
+message RemoveNodeReply {
   // Possible status for an add node request.
   // - SUCCESS: if node was successfully added to the cluster.
   // - NOT_LEADER: request was sent to a node that is not the leader.

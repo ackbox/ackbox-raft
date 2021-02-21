@@ -1,6 +1,7 @@
 package com.ackbox.raft.api
 
 import com.ackbox.raft.networking.NodeAddress
+import com.ackbox.raft.types.LogItem
 import java.nio.ByteBuffer
 
 /**
@@ -14,7 +15,7 @@ interface LeaderNode {
     val nodeId: String
 
     object SetItem {
-        data class Input(val data: List<ByteArray>)
+        data class Input(val type: LogItem.Type, val data: List<ByteArray>)
         data class Output(val leaderId: String?)
     }
 
@@ -42,4 +43,14 @@ interface LeaderNode {
      * Add a new node to the cluster. Only leaders can perform this operation.
      */
     fun addNode(input: AddNode.Input): AddNode.Output
+
+    object RemoveNode {
+        data class Input(val address: NodeAddress)
+        data class Output(val leaderId: String?)
+    }
+
+    /**
+     * Remove a node to the cluster. Only leaders can perform this operation.
+     */
+    fun removeNode(input: RemoveNode.Input): RemoveNode.Output
 }

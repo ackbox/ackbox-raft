@@ -5,46 +5,43 @@ import com.ackbox.raft.api.InternalNodeApi
 import com.ackbox.raft.api.ManagementNodeApi
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.core.LocalNode
-import com.ackbox.raft.core.RemoteNodes
-import io.grpc.Server
-import org.slf4j.LoggerFactory
+import com.ackbox.raft.networking.NodeNetworking
+import com.ackbox.raft.support.NodeLogger
 import java.time.Duration
-import java.util.concurrent.TimeUnit
 
-class Raft(private val config: NodeConfig, private val node: LocalNode) {
+class Raft(config: NodeConfig, private val networking: NodeNetworking, private val node: LocalNode) {
 
+    private val logger: NodeLogger = NodeLogger.from(config.nodeId, Raft::class)
     private val externalApi = ExternalNodeApi(node, config.clock)
     private val internalApi = InternalNodeApi(node, config.clock)
     private val managementApi = ManagementNodeApi(node, config.clock)
 
-    private var server: Server? = null
-
     fun start(): Raft {
-        LOG.info("Starting node [{}]", node.nodeId)
-        server = config.local.toServer(externalApi, internalApi, managementApi).start()
+        logger.info("Starting node")
+        networking.start(externalApi, internalApi, managementApi)
         node.start()
-        LOG.info("Started node [{}]", node.nodeId)
+        logger.info("Started node")
         return this
     }
 
     fun autoStop(): Raft {
-        LOG.info("Setting up auto-stop for node [{}]", node.nodeId)
+        logger.info("Setting up auto-stop")
         Runtime.getRuntime().addShutdownHook(createShutdownHook())
         return this
     }
 
     fun stop(timeout: Duration = DEFAULT_TIMEOUT): Raft {
-        LOG.info("Stopping node [{}]", node.nodeId)
-        server?.shutdown()?.awaitTermination(timeout.toMillis(), TimeUnit.MILLISECONDS)
-        node.stop(timeout)
-        LOG.info("Stopped node [{}]", node.nodeId)
+        logger.info("Stopping node")
+        node.stop()
+        networking.stop(timeout)
+        logger.info("Stopped node")
         return this
     }
 
     fun join(): Raft {
-        LOG.info("Wait for termination signal for node [{}]", node.nodeId)
-        server?.awaitTermination()
-        LOG.info("Proceeding with termination of node [{}]", node.nodeId)
+        logger.info("Wait for node termination signal")
+        networking.awaitTermination()
+        logger.info("Proceeding with node termination")
         return this
     }
 
@@ -68,13 +65,12 @@ class Raft(private val config: NodeConfig, private val node: LocalNode) {
 
     companion object {
 
-        private val LOG = LoggerFactory.getLogger(Raft::class.java)
         private val DEFAULT_TIMEOUT = Duration.ofSeconds(30)
 
         fun fromConfig(config: NodeConfig): Raft {
-            val remotes = RemoteNodes.fromConfig(config)
-            val node = LocalNode.fromConfig(config, remotes)
-            return Raft(config, node)
+            val networking = NodeNetworking.fromConfig(config)
+            val node = LocalNode.fromConfig(config, networking)
+            return Raft(config, networking, node)
         }
     }
 }

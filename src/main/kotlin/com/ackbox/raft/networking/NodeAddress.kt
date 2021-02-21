@@ -51,7 +51,7 @@ data class NodeNetAddress(override val nodeId: String, val host: String, val por
     override fun toChannel(): NamedChannel {
         val target = "$host:$port"
         logger.info("Creating channel to [{}]@[{}]", target, nodeId)
-        return NamedChannel(nodeId, createManagedChannel(target))
+        return NamedChannel(this, createManagedChannel(target))
     }
 
     private fun createManagedChannel(target: String): ManagedChannel {
@@ -80,7 +80,7 @@ data class NodeInmemoryAddress(override val nodeId: String) : NodeAddress {
 
     override fun toChannel(): NamedChannel {
         logger.info("Creating in-memory channel for [{}]", nodeId)
-        return NamedChannel(nodeId, createManagedChannel())
+        return NamedChannel(this, createManagedChannel())
     }
 
     private fun createManagedChannel(): ManagedChannel {

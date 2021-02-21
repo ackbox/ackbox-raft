@@ -3,9 +3,11 @@ package com.ackbox.raft.types
 /**
  * Data class representing a log item.
  */
-data class LogItem(val index: Index, val term: Term, val value: ByteArray) {
+data class LogItem(val type: Type, val index: Index, val term: Term, val value: ByteArray) {
 
-    fun getSizeInBytes(): Int = 2 * Long.SIZE_BYTES + value.size
+    enum class Type { STORE_CHANGE, NETWORKING_CHANGE }
+
+    fun getSizeInBytes(): Int = Int.SIZE_BYTES + 2 * Long.SIZE_BYTES + value.size
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -25,6 +27,6 @@ data class LogItem(val index: Index, val term: Term, val value: ByteArray) {
     }
 
     override fun toString(): String {
-        return "${LogItem::class.simpleName}(index=${index.value}, term=${term.value}, size=${value.size})"
+        return "${LogItem::class.simpleName}(type=$type, index=${index.value}, term=${term.value}, size=${value.size})"
     }
 }

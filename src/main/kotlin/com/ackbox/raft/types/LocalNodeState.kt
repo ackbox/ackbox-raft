@@ -1,11 +1,11 @@
 package com.ackbox.raft.types
 
 import com.ackbox.raft.config.NodeConfig
+import com.ackbox.raft.core.Snapshot
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.log.SegmentedLog
-import com.ackbox.raft.statemachine.KeyValueStore
-import com.ackbox.raft.statemachine.ReplicatedStateMachine
-import com.ackbox.raft.statemachine.Snapshot
+import com.ackbox.raft.networking.NodeNetworking
+import com.ackbox.raft.store.KeyValueStore
 import com.ackbox.raft.support.Callback
 import com.ackbox.raft.support.LeaderMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
@@ -14,6 +14,8 @@ import com.ackbox.raft.support.NodeTimer
 import com.ackbox.raft.support.RequestTermInvariantException
 import com.ackbox.raft.support.VoteNotGrantedException
 import java.nio.ByteBuffer
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.Lock
@@ -50,8 +52,10 @@ class LocalNodeState(private val config: NodeConfig, private val unsafeState: Un
 
     companion object {
 
-        fun fromConfig(config: NodeConfig): LocalNodeState {
-            return LocalNodeState(config, UnsafeLocalNodeState(config))
+        fun fromConfig(config: NodeConfig, networking: NodeNetworking): LocalNodeState {
+            val store = KeyValueStore.fromConfig(config)
+            val unsafeState = UnsafeLocalNodeState(config, networking, store)
+            return LocalNodeState(config, unsafeState)
         }
     }
 }
@@ -59,7 +63,8 @@ class LocalNodeState(private val config: NodeConfig, private val unsafeState: Un
 @NotThreadSafe
 class UnsafeLocalNodeState(
     private val config: NodeConfig,
-    private val stateMachine: ReplicatedStateMachine = KeyValueStore(config),
+    private val networking: NodeNetworking,
+    private val store: KeyValueStore,
     val metadata: Metadata = Metadata(config.nodeId),
     val log: ReplicatedLog = SegmentedLog(config)
 ) {
@@ -151,49 +156,62 @@ class UnsafeLocalNodeState(
         if (commitIndex > lastAppliedLogIndex) {
             (lastAppliedLogIndex.value..commitIndex.value).forEach { index ->
                 val item = log.getItem(Index(index)) ?: throw IllegalStateException("Corrupted log at index [$index]")
-                stateMachine.setValue(item.value)
+                when (item.type) {
+                    LogItem.Type.STORE_CHANGE -> store.applyValue(item.value)
+                    LogItem.Type.NETWORKING_CHANGE -> networking.applyValue(item.value)
+                }
                 // Update lastAppliedLogIndex to currently applied item index.
                 metadata.updateCommitMetadata(item.index, item.term, commitIndex)
             }
         }
     }
 
-    fun getStateValue(key: String): ByteBuffer? {
-        return stateMachine.getValue(key)?.let { ByteBuffer.wrap(it) }
+    fun getStoreValue(key: String): ByteBuffer? {
+        return store.getValue(key)?.let { ByteBuffer.wrap(it) }
     }
 
-    fun restoreSnapshot(newSnapshot: Snapshot) {
+    fun restoreSnapshot(lastIncludedLogIndex: Index, lastIncludedLogTerm: Term, sourceDataPath: Path) {
         // We try to find an item in the current node's log that matches the index and term from the snapshot provided.
         // If the item is found, it means that the log matching property is satisfied, thus all subsequent items
         // (if existent) are compatible with the leader's.
-        if (log.containsItem(newSnapshot.lastIncludedLogIndex, newSnapshot.lastIncludedLogTerm)) {
+        if (log.containsItem(lastIncludedLogIndex, lastIncludedLogTerm)) {
             return
         }
 
         // If no item is found, we replace the state machine's state with the snapshot provided as well as reset the
         // logs so that the leader can properly replicate its own.
-        stateMachine.restoreSnapshot(newSnapshot.dataPath)
+        snapshot = Snapshot.fromCompressedData(sourceDataPath, config.snapshotPath)
+
+        store.restoreSnapshot(snapshot.dataPath)
+        networking.restoreSnapshot(snapshot.dataPath)
         metadata.updateCommitMetadata(
-            newSnapshot.lastIncludedLogIndex,
-            newSnapshot.lastIncludedLogTerm,
-            newSnapshot.lastIncludedLogIndex
+            snapshot.lastIncludedLogIndex,
+            snapshot.lastIncludedLogTerm,
+            snapshot.lastIncludedLogIndex
         )
         log.clear()
-
-        // Up until here, the snapshot was in a temporary folder on the file system. If all the previous operations are
-        // successful, we promote the snapshot to latest.
-        snapshot = newSnapshot.save(config.snapshotPath)
     }
 
     fun takeSnapshot() {
-        val dataPath = stateMachine.takeSnapshot()
-        val commitMetadata = metadata.commitMetadata
-        val newSnapshot = Snapshot(commitMetadata.lastAppliedLogIndex, commitMetadata.lastAppliedLogTerm, dataPath)
-        log.truncateBeforeNonInclusive(commitMetadata.lastAppliedLogIndex)
+        val snapshotPath = Files.createTempDirectory(UUID.randomUUID().toString())
+        try {
+            val lastIncludedLogIndex = metadata.commitMetadata.lastAppliedLogIndex
+            val lastIncludedLogTerm = metadata.commitMetadata.lastAppliedLogTerm
+            store.takeSnapshot(snapshotPath)
+            networking.takeSnapshot(snapshotPath)
+            log.truncateBeforeNonInclusive(lastIncludedLogIndex)
 
-        // Up until here, the snapshot was in a temporary folder on the file system. If all the previous operations are
-        // successful, we promote the snapshot to latest.
-        snapshot = newSnapshot.save(config.snapshotPath)
+            // Up until here, the snapshot was in a temporary folder on the file system. If all the previous operations
+            // are successful, we promote the snapshot to latest.
+            snapshot = Snapshot.fromDecompressedData(
+                lastIncludedLogIndex,
+                lastIncludedLogTerm,
+                snapshotPath,
+                config.snapshotPath,
+            )
+        } finally {
+            snapshotPath.runCatching { toFile().deleteRecursively() }
+        }
     }
 
     fun getLatestSnapshot(): Snapshot {
@@ -234,10 +252,11 @@ class UnsafeLocalNodeState(
         // whenever no snapshot is available, a snapshot object is initialized with the default values for
         // lastIncludedLogIndex and lastIncludedLogTerm.
         val lastLogItem = log.getItem(log.getLastItemIndex())
-        val index = max(snapshot.lastIncludedLogIndex, lastLogItem?.index ?: Index())
-        val term = max(snapshot.lastIncludedLogTerm, lastLogItem?.term ?: Term())
+        val index = max(snapshot.lastIncludedLogIndex, lastLogItem?.index ?: Index.UNDEFINED)
+        val term = max(snapshot.lastIncludedLogTerm, lastLogItem?.term ?: Term.UNDEFINED)
         val commitIndex = snapshot.lastIncludedLogIndex
-        stateMachine.restoreSnapshot(snapshot.dataPath)
+        store.restoreSnapshot(snapshot.dataPath)
+        networking.restoreSnapshot(snapshot.dataPath)
 
         // Load node's log and trim it before the snapshot's last included log index to save some storage space.
         log.open()

@@ -9,7 +9,6 @@ import com.ackbox.raft.api.VoteRequest
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.networking.NamedChannel
-import com.ackbox.raft.statemachine.Snapshot
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.ReplyTermInvariantException
 import com.ackbox.raft.types.Index

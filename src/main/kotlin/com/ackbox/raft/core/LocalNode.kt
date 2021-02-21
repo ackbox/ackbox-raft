@@ -2,15 +2,15 @@ package com.ackbox.raft.core
 
 import com.ackbox.raft.api.LeaderNode
 import com.ackbox.raft.api.LeaderNode.AddNode
-import com.ackbox.raft.api.LeaderNode.AddNode.Output
 import com.ackbox.raft.api.LeaderNode.GetItem
+import com.ackbox.raft.api.LeaderNode.RemoveNode
 import com.ackbox.raft.api.LeaderNode.SetItem
 import com.ackbox.raft.api.ReplicaNode
 import com.ackbox.raft.api.ReplicaNode.Append
 import com.ackbox.raft.api.ReplicaNode.Vote
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.networking.NodeInmemoryAddress
-import com.ackbox.raft.statemachine.Snapshot
+import com.ackbox.raft.networking.NodeNetworking
+import com.ackbox.raft.networking.NodeNetworkingChange
 import com.ackbox.raft.support.Callback
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.NodeLogger
@@ -19,9 +19,9 @@ import com.ackbox.raft.support.ReplicaStateMismatchException
 import com.ackbox.raft.support.ReplyTermInvariantException
 import com.ackbox.raft.support.TemporaryFile
 import com.ackbox.raft.types.*
+import com.ackbox.raft.types.LogItem.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
-import java.time.Duration
 import javax.annotation.concurrent.ThreadSafe
 
 /**
@@ -46,15 +46,13 @@ class LocalNode(
         val electionCallback = createElectionCallback()
         val heartbeatCallback = createHeartbeatCallback()
         val snapshotCallback = createSnapshotCallback()
-        remotes.start()
         locked.withLock(START_NODE_OPERATION) { state ->
             state.start(electionCallback, heartbeatCallback, snapshotCallback)
         }
     }
 
-    fun stop(timeout: Duration) {
+    fun stop() {
         locked.withLock(STOP_NODE_OPERATION) { state -> state.stop() }
-        remotes.stop(timeout)
     }
 
     fun describeState() {
@@ -63,51 +61,13 @@ class LocalNode(
 
     override fun setItem(input: SetItem.Input): SetItem.Output {
         return locked.withLock(REQUEST_APPEND_OPERATION) { state ->
-            // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
-            // the leader for the current term.
-            val consensusMetadata = state.metadata.consensusMetadata
-            val leaderId = consensusMetadata.leaderId
-            if (consensusMetadata.mode != NodeMode.LEADER) {
-                throw NotLeaderException(leaderId)
-            }
-
             // Apply entries the replicated to the leader's log before doing anything.
+            val consensusMetadata = state.metadata.consensusMetadata
+            val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
-            val items = convertToLogItems(leaderTerm, state.log.getLastItemIndex(), input.data)
-            val lastLogItemIndex = state.appendLogItems(items)
-
-            // Dispatch requests in parallel to all replicas/remote in the cluster in order to append the new entry to
-            // their logs. In these requests, we send the current leader information (id and term) as well as pack all
-            // entries that we think the remote node will need to catch up with leader's log. In order to do so, we use
-            // the remote#nextLogIndex and remote#matchLogIndex information.
-            val remoteStates = try {
-                remotes.appendItems(state.metadata, state.log, state.getLatestSnapshot())
-            } catch (e: ReplyTermInvariantException) {
-                // Remotes will throw term invariant exception whenever they detect that their term is greater than the
-                // node that generated the append request (case of 'this' node since it's performing the append
-                // request). This might mean that there are multiple nodes thinking they are leaders in the cluster.
-                state.transitionToFollower(e.remoteTerm)
-                throw e
-            }
-
-            // Verify replication consensus status across majority in the cluster.
-            val matchIndexes = mutableListOf<Long>()
-                .apply { remoteStates.forEach { add(it.matchLogIndex.value) } }
-                .apply { add(lastLogItemIndex.value) }
-                .sorted()
-            val commitIndex = Index(matchIndexes[remotes.remotesCount / 2])
-            val commitMetadata = state.metadata.commitMetadata
-            logger.info("Commit index updated from [{}] to [{}]", commitMetadata.commitIndex, commitIndex)
-
-            // Only update the commit index if there's consensus in the replication results from all the remotes in the
-            // cluster.
-            if (commitIndex < commitMetadata.commitIndex) {
-                throw CommitIndexMismatchException(leaderId, commitMetadata.commitIndex, commitIndex)
-            }
-
-            // Commit items that were confirmed to be replicated across the cluster.
-            state.commitLogItems(commitIndex)
-            return@withLock SetItem.Output(leaderId)
+            val items = convertToLogItems(input.type, lastItemIndex, leaderTerm, input.data)
+            appendItem(state, items)
+            return@withLock SetItem.Output(consensusMetadata.leaderId)
         }
     }
 
@@ -121,12 +81,12 @@ class LocalNode(
                 throw NotLeaderException(leaderId)
             }
 
-            // Retrieve committed entry from state machine.
-            GetItem.Output(leaderId, state.getStateValue(input.key))
+            // Retrieve committed entry from key-value store.
+            GetItem.Output(leaderId, state.getStoreValue(input.key))
         }
     }
 
-    override fun addNode(input: AddNode.Input): Output {
+    override fun addNode(input: AddNode.Input): AddNode.Output {
         val snapshot = locked.withLock(REQUEST_ADD_NODE_OPERATION) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
             // the leader for the current term.
@@ -137,13 +97,42 @@ class LocalNode(
             return@withLock state.getLatestSnapshot()
         }
 
-        // Try to activate the new node by sending the latest snapshot.
-        val leaderId = remotes.activateNode(input.address, snapshot) {
-            // Finalize the node activation by broadcasting the new node to all replicas in the cluster.
-            val output = setItem(SetItem.Input(type = EntryType.ADD_NODE_CHANGE, payload = payload))
-            return@activateNode output.leaderId
+        // Try to activate the new node by sending the latest snapshot. In this process, we create a temporary remote
+        // facade in order to send the latest leader's snapshot. If it's successful, the leader will commit a log item
+        // that will cause the new remote to be added to the leader's networking setup.
+        val channel = input.address.toChannel()
+        try {
+            val remoteNode = RemoteNode(config, channel)
+            remoteNode.sendSnapshot(snapshot)
+        } finally {
+            channel.runCatching { shutdownNow() }
         }
-        return Output(leaderId)
+
+        // Replicate the configuration change.
+        return locked.withLock(REQUEST_ADD_NODE_OPERATION) { state ->
+            val consensusMetadata = state.metadata.consensusMetadata
+            val lastItemIndex = state.log.getLastItemIndex()
+            val leaderTerm = consensusMetadata.currentTerm
+            val change = NodeNetworkingChange(NodeNetworkingChange.Type.ADDED, input.address)
+            val data = listOf(change.toByteArray())
+            val items = convertToLogItems(Type.NETWORKING_CHANGE, lastItemIndex, leaderTerm, data)
+            appendItem(state, items)
+            return@withLock AddNode.Output(consensusMetadata.leaderId)
+        }
+    }
+
+    override fun removeNode(input: RemoveNode.Input): RemoveNode.Output {
+        // Replicate the configuration change.
+        return locked.withLock(REQUEST_REMOVE_NODE_OPERATION) { state ->
+            val consensusMetadata = state.metadata.consensusMetadata
+            val lastItemIndex = state.log.getLastItemIndex()
+            val leaderTerm = consensusMetadata.currentTerm
+            val change = NodeNetworkingChange(NodeNetworkingChange.Type.REMOVED, input.address)
+            val data = listOf(change.toByteArray())
+            val items = convertToLogItems(Type.NETWORKING_CHANGE, lastItemIndex, leaderTerm, data)
+            appendItem(state, items)
+            return@withLock RemoveNode.Output(consensusMetadata.leaderId)
+        }
     }
 
     override suspend fun handleAppend(input: Append.Input): Append.Output {
@@ -195,7 +184,6 @@ class LocalNode(
             val leaderCommitIndex = input.leaderCommitIndex
             val processedLastLogItemIndex = state.appendLogItems(input.items)
             state.commitLogItems(leaderCommitIndex)
-            remotes.activateNode(NodeInmemoryAddress(""))
             return@withLock Append.Output(currentTerm, processedLastLogItemIndex)
         }
     }
@@ -269,13 +257,57 @@ class LocalNode(
                 // contents of the snapshot file.
                 val lastIncludedLogIndex = lastInput!!.lastIncludedLogIndex
                 val lastIncludedLogTerm = lastInput!!.lastIncludedLogTerm
-                val snapshot = Snapshot(lastIncludedLogIndex, lastIncludedLogTerm, file.toPath())
-                state.restoreSnapshot(snapshot)
+                state.restoreSnapshot(lastIncludedLogIndex, lastIncludedLogTerm, file.toPath())
 
                 logger.info("Snapshot successfully loaded for input=[{}]", lastInput)
                 return@withLock ReplicaNode.Snapshot.Output(state.metadata.consensusMetadata.currentTerm)
             }
         }
+    }
+
+    private fun appendItem(state: UnsafeLocalNodeState, items: List<LogItem>) {
+        // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
+        // the leader for the current term.
+        val consensusMetadata = state.metadata.consensusMetadata
+        val leaderId = consensusMetadata.leaderId
+        if (consensusMetadata.mode != NodeMode.LEADER) {
+            throw NotLeaderException(leaderId)
+        }
+
+        // Apply entries the replicated to the leader's log before doing anything.
+        val lastLogItemIndex = state.appendLogItems(items)
+
+        // Dispatch requests in parallel to all replicas/remote in the cluster in order to append the new entry to
+        // their logs. In these requests, we send the current leader information (id and term) as well as pack all
+        // entries that we think the remote node will need to catch up with leader's log. In order to do so, we use
+        // the remote#nextLogIndex and remote#matchLogIndex information.
+        val remoteStates = try {
+            remotes.appendItems(state.metadata, state.log, state.getLatestSnapshot())
+        } catch (e: ReplyTermInvariantException) {
+            // Remotes will throw term invariant exception whenever they detect that their term is greater than the
+            // node that generated the append request (case of 'this' node since it's performing the append
+            // request). This might mean that there are multiple nodes thinking they are leaders in the cluster.
+            state.transitionToFollower(e.remoteTerm)
+            throw e
+        }
+
+        // Verify replication consensus status across majority in the cluster.
+        val matchIndexes = mutableListOf<Long>()
+            .apply { remoteStates.forEach { add(it.matchLogIndex.value) } }
+            .apply { add(lastLogItemIndex.value) }
+            .sorted()
+        val commitIndex = Index(matchIndexes[remotes.remotesCount / 2])
+        val commitMetadata = state.metadata.commitMetadata
+        logger.info("Commit index updated from [{}] to [{}]", commitMetadata.commitIndex, commitIndex)
+
+        // Only update the commit index if there's consensus in the replication results from all the remotes in the
+        // cluster.
+        if (commitIndex < commitMetadata.commitIndex) {
+            throw CommitIndexMismatchException(leaderId, commitMetadata.commitIndex, commitIndex)
+        }
+
+        // Commit items that were confirmed to be replicated across the cluster.
+        state.commitLogItems(commitIndex)
     }
 
     private fun createElectionCallback(): Callback {
@@ -317,8 +349,8 @@ class LocalNode(
         return {
             try {
                 logger.info("Started heartbeat with followers")
-                val output = setItem(SetItem.Input(emptyList()))
-                logger.debug("Finished heartbeat with followers: [{}]", output)
+                locked.withLock(HEARTBEAT_OPERATION) { state -> appendItem(state, emptyList()) }
+                logger.debug("Finished heartbeat with followers")
             } catch (e: Exception) {
                 logger.error("Error while executing heartbeat", e)
             }
@@ -340,16 +372,20 @@ class LocalNode(
         }
     }
 
-    private fun convertToLogItems(currentTerm: Term, lastItemIndex: Index, data: List<ByteArray>): List<LogItem> {
+    private fun convertToLogItems(type: Type, lastItemIndex: Index, term: Term, data: List<ByteArray>): List<LogItem> {
         return data.mapIndexed { index, bytes ->
-            LogItem(lastItemIndex.incrementedBy(index.toLong()), currentTerm, bytes)
+            LogItem(type, lastItemIndex.incrementedBy(index.toLong()), term, bytes)
         }
     }
 
     companion object {
 
-        fun fromConfig(config: NodeConfig, remotes: RemoteNodes): LocalNode {
-            return LocalNode(config, LocalNodeState.fromConfig(config), remotes)
+        fun fromConfig(config: NodeConfig, networking: NodeNetworking): LocalNode {
+            val state = LocalNodeState.fromConfig(config, networking)
+            val remotes = RemoteNodes.fromConfig(config, networking.getChannels())
+            networking.setOnChannelAdded { channel -> remotes.activateNode(channel) }
+            networking.setOnChannelRemoved { channel -> remotes.deactivateNode(channel) }
+            return LocalNode(config, state, remotes)
         }
     }
 }

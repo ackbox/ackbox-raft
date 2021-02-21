@@ -7,6 +7,7 @@ import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NotLeaderException
+import com.ackbox.raft.types.LogItem
 import com.google.protobuf.ByteString
 import java.nio.ByteBuffer
 import java.time.Clock
@@ -23,7 +24,7 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
     override suspend fun setEntry(request: SetEntryRequest): SetEntryReply {
         logger.debug("Received set entry request [{}]", request)
         return try {
-            val input = SetItem.Input(listOf(request.entry.toByteArray()))
+            val input = SetItem.Input(LogItem.Type.STORE_CHANGE, listOf(request.entry.toByteArray()))
             val output = node.setItem(input)
             createSuccessSetEntryReply(output.leaderId)
         } catch (e: NotLeaderException) {

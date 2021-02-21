@@ -1,9 +1,9 @@
 package com.ackbox.raft.api
 
-import com.ackbox.raft.types.Index
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NotLeaderException
+import com.ackbox.raft.types.Index
 import com.ackbox.random.krandom
 import com.nhaarman.mockitokotlin2.any
 import com.nhaarman.mockitokotlin2.doReturn
@@ -28,10 +28,10 @@ internal class ExternalNodeApiTest {
 
         whenever(node.setItem(any())).thenReturn(output)
 
-        val reply = runBlocking { api.set(SetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
         assertEquals(output.leaderId, reply.leaderId)
-        assertEquals(SetReply.Status.SUCCESS, reply.status)
+        assertEquals(SetEntryReply.Status.SUCCESS, reply.status)
     }
 
     @Test
@@ -40,10 +40,10 @@ internal class ExternalNodeApiTest {
 
         whenever(node.setItem(any())).thenThrow(NotLeaderException(LEADER_ID))
 
-        val reply = runBlocking { api.set(SetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
         assertEquals(LEADER_ID, reply.leaderId)
-        assertEquals(SetReply.Status.NOT_LEADER, reply.status)
+        assertEquals(SetEntryReply.Status.NOT_LEADER, reply.status)
     }
 
     @Test
@@ -52,10 +52,10 @@ internal class ExternalNodeApiTest {
 
         whenever(node.setItem(any())).thenThrow(CommitIndexMismatchException(LEADER_ID, COMMIT_INDEX, COMMIT_INDEX))
 
-        val reply = runBlocking { api.set(SetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
         assertEquals(LEADER_ID, reply.leaderId)
-        assertEquals(SetReply.Status.COMMIT_ERROR, reply.status)
+        assertEquals(SetEntryReply.Status.COMMIT_ERROR, reply.status)
     }
 
     @Test
@@ -64,10 +64,10 @@ internal class ExternalNodeApiTest {
 
         whenever(node.setItem(any())).thenThrow(LockNotAcquiredException())
 
-        val reply = runBlocking { api.set(SetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
         assertTrue(reply.leaderId.isBlank())
-        assertEquals(SetReply.Status.PROCESSING, reply.status)
+        assertEquals(SetEntryReply.Status.PROCESSING, reply.status)
     }
 
     @Test
@@ -76,10 +76,10 @@ internal class ExternalNodeApiTest {
 
         whenever(node.setItem(any())).thenThrow(RuntimeException())
 
-        val reply = runBlocking { api.set(SetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
         assertTrue(reply.leaderId.isBlank())
-        assertEquals(SetReply.Status.UNKNOWN, reply.status)
+        assertEquals(SetEntryReply.Status.UNKNOWN, reply.status)
     }
 
     @Test
@@ -89,11 +89,11 @@ internal class ExternalNodeApiTest {
 
         whenever(node.getItem(any())).thenReturn(output)
 
-        val reply = runBlocking { api.get(GetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.getEntry(GetEntryRequest.getDefaultInstance()) }
 
         assertEquals(output.leaderId, reply.leaderId)
         assertArrayEquals(output.data?.array(), reply.entry.toByteArray())
-        assertEquals(GetReply.Status.SUCCESS, reply.status)
+        assertEquals(GetEntryReply.Status.SUCCESS, reply.status)
     }
 
     @Test
@@ -102,11 +102,11 @@ internal class ExternalNodeApiTest {
 
         whenever(node.getItem(any())).thenThrow(NotLeaderException(LEADER_ID))
 
-        val reply = runBlocking { api.get(GetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.getEntry(GetEntryRequest.getDefaultInstance()) }
 
         assertEquals(LEADER_ID, reply.leaderId)
         assertArrayEquals(ByteArray(0), reply.entry.toByteArray())
-        assertEquals(GetReply.Status.NOT_LEADER, reply.status)
+        assertEquals(GetEntryReply.Status.NOT_LEADER, reply.status)
     }
 
     @Test
@@ -115,11 +115,11 @@ internal class ExternalNodeApiTest {
 
         whenever(node.getItem(any())).thenThrow(LockNotAcquiredException())
 
-        val reply = runBlocking { api.get(GetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.getEntry(GetEntryRequest.getDefaultInstance()) }
 
         assertTrue(reply.leaderId.isBlank())
         assertArrayEquals(ByteArray(0), reply.entry.toByteArray())
-        assertEquals(GetReply.Status.PROCESSING, reply.status)
+        assertEquals(GetEntryReply.Status.PROCESSING, reply.status)
     }
 
     @Test
@@ -128,11 +128,11 @@ internal class ExternalNodeApiTest {
 
         whenever(node.getItem(any())).thenThrow(RuntimeException())
 
-        val reply = runBlocking { api.get(GetRequest.getDefaultInstance()) }
+        val reply = runBlocking { api.getEntry(GetEntryRequest.getDefaultInstance()) }
 
         assertTrue(reply.leaderId.isBlank())
         assertArrayEquals(ByteArray(0), reply.entry.toByteArray())
-        assertEquals(GetReply.Status.UNKNOWN, reply.status)
+        assertEquals(GetEntryReply.Status.UNKNOWN, reply.status)
     }
 
     companion object {

@@ -2,11 +2,11 @@ package com.ackbox.raft.log
 
 import com.ackbox.raft.Fixtures
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.types.Randoms
-import com.ackbox.raft.types.UNDEFINED_ID
 import com.ackbox.raft.networking.NodeInmemoryAddress
 import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.Randoms
 import com.ackbox.raft.types.Term
+import com.ackbox.raft.types.UNDEFINED_ID
 import com.ackbox.raft.use
 import com.ackbox.random.krandom
 import com.google.common.primitives.Ints
@@ -28,7 +28,7 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val firstOffset = Randoms.between(5, 20)
         val items = (0 until firstOffset).map { offset ->
-            Fixtures.createLogItem(Index.UNDEFINED.incrementedBy(offset))
+            Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset))
         }
         SegmentedLog(config).use { log -> log.appendItems(items) }
         SegmentedLog(config).use { log -> items.forEach { item -> assertEquals(item, log.getItem(item.index)) } }
@@ -39,7 +39,7 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val expectedSegments = Randoms.between(5, 20)
         val items = (0 until expectedSegments).map { offset ->
-            Fixtures.createLogItem(Index.UNDEFINED.incrementedBy(offset), data = Ints.toByteArray(krandom()))
+            Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset), data = Ints.toByteArray(krandom()))
         }
         val segmentedLog = SegmentedLog(config)
         segmentedLog.use { log -> log.appendItems(items) }
@@ -51,7 +51,7 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val expectedSegments = Randoms.between(5, 20)
         val items = (0 until expectedSegments).map { offset ->
-            Fixtures.createLogItem(Index.UNDEFINED.incrementedBy(offset), data = Ints.toByteArray(krandom()))
+            Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset), data = Ints.toByteArray(krandom()))
         }
         val segmentedLog = SegmentedLog(config)
         segmentedLog.use { log -> log.appendItems(items) }
@@ -67,9 +67,9 @@ internal class SegmentedLogTest {
         val prefixOffset = Randoms.between(5, 20)
         val mismatchIndex = Index(Randoms.between(UNDEFINED_ID, prefixOffset))
         val items = (0 until prefixOffset).map { offset ->
-            Fixtures.createLogItem(Index.UNDEFINED.incrementedBy(offset), term1)
+            Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset), term = term1)
         }
-        val mismatchItem = Fixtures.createLogItem(mismatchIndex, term2)
+        val mismatchItem = Fixtures.createLogItem(index = mismatchIndex, term = term2)
 
         SegmentedLog(config).use { log ->
             log.appendItems(items)
@@ -90,7 +90,7 @@ internal class SegmentedLogTest {
     fun `should delete logs when clear method is called`() {
         val config = createConfig(krandom())
         val items = (0 until Randoms.between(5, 20)).map { offset ->
-            Fixtures.createLogItem(Index.UNDEFINED.incrementedBy(offset))
+            Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset))
         }
         SegmentedLog(config).use { log -> log.appendItems(items) }
         SegmentedLog(config).use { log -> log.clear() }
@@ -103,7 +103,7 @@ internal class SegmentedLogTest {
         val prefixOffset = Randoms.between(25, 50)
         val pivotIndex = Index(Randoms.between(UNDEFINED_ID, prefixOffset))
         val items = (0 until prefixOffset).map { offset ->
-            Fixtures.createLogItem(Index.UNDEFINED.incrementedBy(offset))
+            Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset))
         }
 
         SegmentedLog(config).use { log -> log.appendItems(items) }
@@ -124,7 +124,7 @@ internal class SegmentedLogTest {
         val prefixOffset = Randoms.between(25, 50)
         val pivotIndex = Index(Randoms.between(UNDEFINED_ID, prefixOffset))
         val items = (0 until prefixOffset).map { offset ->
-            Fixtures.createLogItem(Index.UNDEFINED.incrementedBy(offset))
+            Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset))
         }
 
         SegmentedLog(config).use { log -> log.appendItems(items) }

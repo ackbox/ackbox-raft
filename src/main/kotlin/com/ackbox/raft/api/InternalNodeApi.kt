@@ -1,5 +1,6 @@
 package com.ackbox.raft.api
 
+import com.ackbox.raft.api.AppendRequest.EntryType
 import com.ackbox.raft.api.InternalNodeGrpcKt.InternalNodeCoroutineImplBase
 import com.ackbox.raft.support.LeaderMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
@@ -181,6 +182,11 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
     }
 
     private fun AppendRequest.Entry.toLogItem(): LogItem {
-        return LogItem(Index(index), Term(term), entry.toByteArray())
+        val logType = when (type!!) {
+            EntryType.STORE -> LogItem.Type.STORE_CHANGE
+            EntryType.NETWORKING -> LogItem.Type.NETWORKING_CHANGE
+            EntryType.UNRECOGNIZED -> throw IllegalArgumentException("Unknown entry type")
+        }
+        return LogItem(logType, Index(index), Term(term), entry.toByteArray())
     }
 }

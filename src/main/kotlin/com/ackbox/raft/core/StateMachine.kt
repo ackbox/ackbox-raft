@@ -1,22 +1,17 @@
-package com.ackbox.raft.statemachine
+package com.ackbox.raft.core
 
 import java.nio.file.Path
 
 /**
  * Interface for Raft's replicated state machine.
  */
-interface ReplicatedStateMachine {
+interface StateMachine {
 
     /**
      * Apply a state value to the state machine. Each entry contains command for state machine, and term when
      * entry was received by leader.
      */
-    fun setValue(value: ByteArray)
-
-    /**
-     * Get the state of an entry from the state machine.
-     */
-    fun getValue(key: String): ByteArray?
+    fun applyValue(value: ByteArray)
 
     /**
      * Take a snapshot of the state machine's state. The resulting snapshot should be consistent. The
@@ -24,7 +19,7 @@ interface ReplicatedStateMachine {
      * returns. This means that the implementation of this method does not need to be concerned about
      * concurrency issues.
      */
-    fun takeSnapshot(): Path
+    fun takeSnapshot(destinationPath: Path)
 
     /**
      * Load a snapshot of the state machine's state. The snapshot loading is atomic, meaning that the
@@ -33,5 +28,5 @@ interface ReplicatedStateMachine {
      * this method returns. This means that the implementation of this method does not need to be
      * concerned about concurrency issues.
      */
-    fun restoreSnapshot(path: Path)
+    fun restoreSnapshot(sourcePath: Path)
 }

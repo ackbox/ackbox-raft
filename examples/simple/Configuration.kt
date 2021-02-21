@@ -2,7 +2,7 @@ package simple
 
 import com.ackbox.raft.Raft
 import com.ackbox.raft.api.ExternalNodeGrpc
-import com.ackbox.raft.api.SetRequest
+import com.ackbox.raft.api.SetEntryRequest
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.networking.NodeNetAddress
 import com.google.protobuf.ByteString
@@ -43,7 +43,7 @@ class LoopNode(private val config: NodeConfig) {
             while (isActive) {
                 println("Sending SET request")
                 val request = createRequest()
-                val reply = api.runCatching { set(request) }
+                val reply = api.runCatching { setEntry(request) }
                 if (config.nodeId != reply.getOrNull()?.leaderId) {
                     delay(COOLDOWN.toMillis())
                 }
@@ -52,8 +52,8 @@ class LoopNode(private val config: NodeConfig) {
         }
     }
 
-    private fun createRequest(): SetRequest {
-        return SetRequest.newBuilder()
+    private fun createRequest(): SetEntryRequest {
+        return SetEntryRequest.newBuilder()
             .setTimestamp(System.currentTimeMillis())
             .setEntry(ByteString.copyFrom(UUID.randomUUID().toString().toByteArray()))
             .build()

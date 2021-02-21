@@ -200,7 +200,7 @@ internal class SegmentTest {
     }
 
     private fun createLogItem(index: Index): LogItem {
-        return Fixtures.createLogItem(index, data = DATA_8_BYTES)
+        return Fixtures.createLogItem(index = index, data = DATA_8_BYTES)
     }
 
     companion object {
