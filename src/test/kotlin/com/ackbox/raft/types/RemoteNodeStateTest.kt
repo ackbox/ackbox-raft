@@ -1,5 +1,6 @@
 package com.ackbox.raft.types
 
+import com.ackbox.raft.core.RemoteNodeState
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 

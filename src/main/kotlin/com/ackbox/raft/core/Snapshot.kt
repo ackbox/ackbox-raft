@@ -11,7 +11,9 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.createDirectories
+import kotlin.io.path.createFile
 import kotlin.io.path.div
+import kotlin.io.path.inputStream
 import kotlin.io.path.outputStream
 
 /**
@@ -26,8 +28,8 @@ data class Snapshot(val metadata: SnapshotMetadata, val dataPath: Path) {
 
     companion object {
 
-        private const val METADATA_FILENAME: String = "metadata.snapshot"
-        private const val COMPRESSED_SNAPSHOT_FILENAME: String = "snapshot.zip"
+        internal const val METADATA_FILENAME: String = "metadata.snapshot"
+        internal  const val COMPRESSED_SNAPSHOT_FILENAME: String = "snapshot.zip"
 
         fun load(sourceDataPath: Path): Snapshot {
             return Snapshot(loadMetadata(sourceDataPath), sourceDataPath)
@@ -53,7 +55,6 @@ data class Snapshot(val metadata: SnapshotMetadata, val dataPath: Path) {
             sourceDataPath: Path,
             destinationDataPath: Path
         ): Snapshot {
-            destinationDataPath.createDirectories()
             val metadata = SnapshotMetadata(lastIncludedLogIndex.value, lastIncludedLogTerm.value)
             val loadedMetadata = loadMetadata(destinationDataPath)
             if (metadata.matches(loadedMetadata)) {
@@ -63,6 +64,7 @@ data class Snapshot(val metadata: SnapshotMetadata, val dataPath: Path) {
             }
             try {
                 destinationDataPath.toFile().deleteRecursively()
+                destinationDataPath.createDirectories()
                 saveMetadata(metadata, destinationDataPath)
                 saveData(sourceDataPath, destinationDataPath)
                 compress(destinationDataPath)
@@ -76,8 +78,8 @@ data class Snapshot(val metadata: SnapshotMetadata, val dataPath: Path) {
 
         private fun compress(destinationDataPath: Path) {
             val compressedPath = destinationDataPath / COMPRESSED_SNAPSHOT_FILENAME
-            ZipOutputStream(compressedPath.toFile().outputStream()).use { output ->
-                destinationDataPath.toFile().walkTopDown().forEach { file ->
+            ZipOutputStream(compressedPath.createFile().outputStream()).use { output ->
+                destinationDataPath.toFile().walkTopDown().filter { it.isFile }.forEach { file ->
                     output.putNextEntry(ZipEntry(file.name))
                     file.inputStream().copyTo(output)
                 }
@@ -86,7 +88,7 @@ data class Snapshot(val metadata: SnapshotMetadata, val dataPath: Path) {
 
         private fun decompress(sourceDataPath: Path, destinationDataPath: Path) {
             val compressedPath = sourceDataPath / COMPRESSED_SNAPSHOT_FILENAME
-            ZipInputStream(compressedPath.toFile().inputStream()).use { input ->
+            ZipInputStream(compressedPath.inputStream()).use { input ->
                 var entry = input.nextEntry
                 while (entry != null) {
                     val destinationFilePath = destinationDataPath / entry.name
@@ -98,7 +100,7 @@ data class Snapshot(val metadata: SnapshotMetadata, val dataPath: Path) {
 
         private fun saveMetadata(metadata: SnapshotMetadata, destinationDataPath: Path) {
             val metadataPath = destinationDataPath / METADATA_FILENAME
-            SERIALIZER.writeValue(metadataPath.toFile(), metadata)
+            SERIALIZER.writeValue(metadataPath.createFile().toFile(), metadata)
         }
 
         private fun loadMetadata(sourceDataPath: Path): SnapshotMetadata {

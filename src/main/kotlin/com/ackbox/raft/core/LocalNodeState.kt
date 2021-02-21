@@ -1,7 +1,6 @@
-package com.ackbox.raft.types
+package com.ackbox.raft.core
 
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.core.Snapshot
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.log.SegmentedLog
 import com.ackbox.raft.networking.NodeNetworking
@@ -13,6 +12,12 @@ import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NodeTimer
 import com.ackbox.raft.support.RequestTermInvariantException
 import com.ackbox.raft.support.VoteNotGrantedException
+import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Metadata
+import com.ackbox.raft.types.Term
+import com.ackbox.raft.types.max
+import com.ackbox.raft.types.min
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path

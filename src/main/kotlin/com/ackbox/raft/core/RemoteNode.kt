@@ -14,7 +14,6 @@ import com.ackbox.raft.support.ReplyTermInvariantException
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
 import com.ackbox.raft.types.Metadata
-import com.ackbox.raft.types.RemoteNodeState
 import com.ackbox.raft.types.Term
 import com.ackbox.raft.types.UNDEFINED_ID
 import com.google.protobuf.ByteString

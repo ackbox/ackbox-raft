@@ -7,7 +7,6 @@ import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.UnknownNodeException
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.Metadata
-import com.ackbox.raft.types.RemoteNodeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
