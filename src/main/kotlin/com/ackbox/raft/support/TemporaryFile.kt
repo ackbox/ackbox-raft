@@ -1,20 +1,23 @@
 package com.ackbox.raft.support
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.util.UUID
 
-class TemporaryFile(prefix: String) {
+class TemporaryFile(filename: String) {
 
-    private val wrapped: File = createTemporaryFile(prefix)
+    private val wrapped: File = Paths.get(createTemporaryDir(), filename).toFile()
 
     suspend fun <T : Any> use(receiver: suspend (File) -> T): T {
         try {
             return receiver.invoke(wrapped)
         } finally {
-            wrapped.runCatching { delete() }
+            wrapped.runCatching { deleteRecursively() }
         }
     }
 
-    private fun createTemporaryFile(prefix: String): File {
-        return File.createTempFile(prefix, ".tmp")
+    private fun createTemporaryDir(): String {
+        return Files.createTempDirectory(UUID.randomUUID().toString()).toAbsolutePath().toString()
     }
 }

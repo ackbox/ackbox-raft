@@ -17,7 +17,7 @@ class Metadata(val nodeId: String) {
     var commitMetadata: CommitMetadata = CommitMetadata()
         private set
 
-    private val logger = NodeLogger.from(nodeId, NodeNetworking::class)
+    private val logger = NodeLogger.from(nodeId, Metadata::class)
 
     fun canAcceptLeader(candidateId: String): Boolean {
         return consensusMetadata.votedFor == null || consensusMetadata.votedFor == candidateId
@@ -28,16 +28,22 @@ class Metadata(val nodeId: String) {
     }
 
     fun updateVote(candidateId: String) {
-        logger.info("Updating vote for candidate=[{}]", candidateId)
+        logger.info("Updating vote for candidate [{}]", candidateId)
         consensusMetadata = consensusMetadata.copy(votedFor = candidateId)
     }
 
     fun updateLeaderId(proposedLeaderId: String) {
-        logger.info("Updating leader to leaderId=[{}]", proposedLeaderId)
+        logger.info("Updating leader to leaderId [{}]", proposedLeaderId)
         consensusMetadata = consensusMetadata.copy(votedFor = null, leaderId = proposedLeaderId)
     }
 
     fun updateCommitMetadata(appliedLogIndex: Index, appliedLogTerm: Term, commitIndex: Index) {
+        logger.info(
+            "Updating commit metadata with logIndex=[{}], logTerm=[{}] and commitIndex=[{}]",
+            appliedLogIndex,
+            appliedLogTerm,
+            commitIndex
+        )
         commitMetadata = commitMetadata.copy(
             lastAppliedLogIndex = appliedLogIndex,
             lastAppliedLogTerm = appliedLogTerm,
@@ -46,9 +52,9 @@ class Metadata(val nodeId: String) {
     }
 
     fun updateAsFollower(operationTerm: Term) {
-        logger.info("Updating node state as follower with term=[{}]", operationTerm)
+        logger.info("Updating node state as follower with term [{}]", operationTerm)
         val currentTerm = if (consensusMetadata.currentTerm < operationTerm) {
-            logger.info("Updating term with term=[{}] and resetting votedFor", operationTerm)
+            logger.info("Updating term with term [{}] and resetting votedFor", operationTerm)
             operationTerm
         } else {
             consensusMetadata.currentTerm

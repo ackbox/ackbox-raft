@@ -26,6 +26,8 @@ data class Snapshot(val metadata: SnapshotMetadata, val dataPath: Path) {
 
     val lastIncludedLogTerm: Term = Term(metadata.lastIncludedLogTerm)
 
+    val compressedFilePath: Path = dataPath / COMPRESSED_SNAPSHOT_FILENAME
+
     companion object {
 
         internal const val METADATA_FILENAME: String = "metadata.snapshot"

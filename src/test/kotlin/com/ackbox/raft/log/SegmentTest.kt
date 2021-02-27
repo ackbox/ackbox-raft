@@ -4,6 +4,7 @@ import com.ackbox.raft.Fixtures
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
 import com.ackbox.raft.types.Randoms
+import com.ackbox.raft.types.Term
 import com.ackbox.raft.use
 import com.ackbox.random.krandom
 import com.google.common.primitives.Longs
@@ -143,7 +144,7 @@ internal class SegmentTest {
         val secondOffset = Randoms.between(10, 20)
         val items = (0 until firstOffset).map { offset -> createLogItem(firstIndex.incrementedBy(offset)) }
         val tailItems1 = (firstOffset until secondOffset).map { offset ->
-            createLogItem(firstIndex.incrementedBy(offset))
+            createLogItem(index = firstIndex.incrementedBy(offset))
         }
         val tailItems2 = (firstOffset until secondOffset).map { offset ->
             createLogItem(firstIndex.incrementedBy(offset))
@@ -200,13 +201,14 @@ internal class SegmentTest {
     }
 
     private fun createLogItem(index: Index): LogItem {
-        return Fixtures.createLogItem(index = index, data = DATA_8_BYTES)
+        return Fixtures.createLogItem(index = index, term = TERM, data = DATA_8_BYTES)
     }
 
     companion object {
 
         private const val INDEX_DIFF: Long = 5
         private const val SIZE_1024: Int = 1024
+        private val TERM: Term = Term(krandom())
         private val DATA_8_BYTES = Longs.toByteArray(krandom())
     }
 }

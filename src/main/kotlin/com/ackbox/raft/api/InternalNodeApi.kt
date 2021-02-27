@@ -32,6 +32,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         logger.debug("Received append request [{}]", request)
         return try {
             val input = ReplicaNode.Append.Input(
+                request.requestId,
                 request.leaderId,
                 Term(request.leaderTerm),
                 Index(request.previousLogIndex),
@@ -68,6 +69,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         logger.debug("Received vote request [{}]", request)
         return try {
             val input = ReplicaNode.Vote.Input(
+                request.requestId,
                 request.candidateId,
                 Term(request.candidateTerm),
                 Index(request.lastLogIndex),
@@ -104,6 +106,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
             val inputs = requests.flowOn(Dispatchers.IO).transform { request ->
                 emit(
                     ReplicaNode.Snapshot.Input(
+                        request.requestId,
                         request.leaderId,
                         Term(request.leaderTerm),
                         Index(request.lastIncludedLogIndex),

@@ -22,6 +22,7 @@ import com.ackbox.raft.types.*
 import com.ackbox.raft.types.LogItem.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
+import java.util.UUID
 import javax.annotation.concurrent.ThreadSafe
 
 /**
@@ -46,33 +47,38 @@ class LocalNode(
         val electionCallback = createElectionCallback()
         val heartbeatCallback = createHeartbeatCallback()
         val snapshotCallback = createSnapshotCallback()
-        locked.withLock(START_NODE_OPERATION) { state ->
+        val operationId = UUID.randomUUID().toString()
+        locked.withLock(START_NODE_OPERATION, operationId) { state ->
             state.start(electionCallback, heartbeatCallback, snapshotCallback)
         }
     }
 
     fun stop() {
-        locked.withLock(STOP_NODE_OPERATION) { state -> state.stop() }
+        val operationId = UUID.randomUUID().toString()
+        locked.withLock(STOP_NODE_OPERATION, operationId) { state -> state.stop() }
     }
 
     fun describeState() {
-        locked.withLock(DESCRIBE_STATE_OPERATION) { state -> state.log.describe() }
+        val operationId = UUID.randomUUID().toString()
+        locked.withLock(DESCRIBE_STATE_OPERATION, operationId) { state -> state.log.describe() }
     }
 
     override fun setItem(input: SetItem.Input): SetItem.Output {
-        return locked.withLock(REQUEST_APPEND_OPERATION) { state ->
+        val operationId = UUID.randomUUID().toString()
+        return locked.withLock(REQUEST_APPEND_OPERATION, operationId) { state ->
             // Apply entries the replicated to the leader's log before doing anything.
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
             val items = convertToLogItems(input.type, lastItemIndex, leaderTerm, input.data)
-            appendItem(state, items)
+            appendItem(operationId, state, items)
             return@withLock SetItem.Output(consensusMetadata.leaderId)
         }
     }
 
     override fun getItem(input: GetItem.Input): GetItem.Output {
-        return locked.withLock(REQUEST_RETRIEVE_OPERATION) { state ->
+        val operationId = UUID.randomUUID().toString()
+        return locked.withLock(REQUEST_RETRIEVE_OPERATION, operationId) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
             // the leader for the current term.
             val consensusMetadata = state.metadata.consensusMetadata
@@ -87,7 +93,7 @@ class LocalNode(
     }
 
     override fun addNode(input: AddNode.Input): AddNode.Output {
-        val snapshot = locked.withLock(REQUEST_ADD_NODE_OPERATION) { state ->
+        val snapshot = locked.withLock(REQUEST_ADD_NODE_OPERATION, input.requestId) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
             // the leader for the current term.
             val consensusMetadata = state.metadata.consensusMetadata
@@ -100,37 +106,38 @@ class LocalNode(
         // Try to activate the new node by sending the latest snapshot. In this process, we create a temporary remote
         // facade in order to send the latest leader's snapshot. If it's successful, the leader will commit a log item
         // that will cause the new remote to be added to the leader's networking setup.
+        val metadata = locked.withLock(REQUEST_ADD_NODE_OPERATION, input.requestId) { state -> state.metadata }
         val channel = input.address.toChannel()
         try {
             val remoteNode = RemoteNode(config, channel)
-            remoteNode.sendSnapshot(snapshot)
+            remoteNode.sendSnapshot(input.requestId, metadata, snapshot)
         } finally {
             channel.runCatching { shutdownNow() }
         }
 
         // Replicate the configuration change.
-        return locked.withLock(REQUEST_ADD_NODE_OPERATION) { state ->
+        return locked.withLock(REQUEST_ADD_NODE_OPERATION, input.requestId) { state ->
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
             val change = NodeNetworkingChange(NodeNetworkingChange.Type.ADDED, input.address)
             val data = listOf(change.toByteArray())
             val items = convertToLogItems(Type.NETWORKING_CHANGE, lastItemIndex, leaderTerm, data)
-            appendItem(state, items)
+            appendItem(input.requestId, state, items)
             return@withLock AddNode.Output(consensusMetadata.leaderId)
         }
     }
 
     override fun removeNode(input: RemoveNode.Input): RemoveNode.Output {
         // Replicate the configuration change.
-        return locked.withLock(REQUEST_REMOVE_NODE_OPERATION) { state ->
+        return locked.withLock(REQUEST_REMOVE_NODE_OPERATION, input.requestId) { state ->
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
             val change = NodeNetworkingChange(NodeNetworkingChange.Type.REMOVED, input.address)
             val data = listOf(change.toByteArray())
             val items = convertToLogItems(Type.NETWORKING_CHANGE, lastItemIndex, leaderTerm, data)
-            appendItem(state, items)
+            appendItem(input.requestId, state, items)
             return@withLock RemoveNode.Output(consensusMetadata.leaderId)
         }
     }
@@ -141,7 +148,7 @@ class LocalNode(
 
         // Lock the state in order to avoid inconsistencies while checks and validations are being performed for the
         // append request.
-        return locked.withLock(HANDLE_APPEND_OPERATION) { state ->
+        return locked.withLock(HANDLE_APPEND_OPERATION, input.requestId) { state ->
             // Check whether there are multiple leaders sending append requests. If multiple leaders are detected, force
             // them to step down and restart an election by incrementing the term.
             val leaderId = input.leaderId
@@ -167,20 +174,18 @@ class LocalNode(
             val currentTerm = state.metadata.consensusMetadata.currentTerm
             val previousLogIndex = input.previousLogIndex
             val previousLogTerm = input.previousLogTerm
-            val isFirstAppend = previousLogIndex.isUndefined() && previousLogTerm.isUndefined()
-            if (!isFirstAppend && !state.log.containsItem(previousLogIndex, previousLogTerm)) {
+            if (!state.containsItem(previousLogIndex, previousLogTerm)) {
                 logger.info("Log mismatch for logIndex=[{}] and logTerm=[{}]", previousLogIndex, previousLogTerm)
                 // Optimization can be done in order to ensure minimum retransmission. Instead of returning
                 // previousLogIndex - 1 for the case of index mismatch, we can return state.log.getLastItemIndex().
-                val lastLogItem = state.log.getItem(state.log.getLastItemIndex())!!
-                val lastLogIndex = lastLogItem.index
+                val lastLogIndex = state.log.getLastItemIndex()
                 val correctionLogIndex =
                     if (lastLogIndex == previousLogIndex) previousLogIndex.decremented() else lastLogIndex
                 throw ReplicaStateMismatchException(currentTerm, correctionLogIndex)
             }
 
             // The node can now safely apply the log entries to its log.
-            logger.info("Append entry ready to be committed until index=[{}]", input.leaderCommitIndex)
+            logger.info("Append entry ready to be committed until index [{}]", input.leaderCommitIndex)
             val leaderCommitIndex = input.leaderCommitIndex
             val processedLastLogItemIndex = state.appendLogItems(input.items)
             state.commitLogItems(leaderCommitIndex)
@@ -194,7 +199,7 @@ class LocalNode(
 
         // Lock the state in order to avoid inconsistencies while checks and validations are being performed for the
         // vote request.
-        return locked.withLock(HANDLE_VOTE_OPERATION) { state ->
+        return locked.withLock(HANDLE_VOTE_OPERATION, input.requestId) { state ->
             // We ensure a valid candidate by checking the following cases:
             //   1. Check whether the candidate node has a term greater than the term known by this node.
             //   2. Check whether the node can vote for the candidate.
@@ -206,7 +211,7 @@ class LocalNode(
             //   2. Candidate's log is caught up with node's.
             // Note that the log consistency restriction allows for a uni-directional flow for entries: entries flow
             // from leader to follower always. A leader will never be elected if its log is behind.
-            logger.info("Vote granted to candidateId=[{}]", input.candidateId)
+            logger.info("Vote granted to candidateId [{}]", input.candidateId)
             state.updateVote(input.candidateId)
             return@withLock Vote.Output(state.metadata.consensusMetadata.currentTerm)
         }
@@ -214,7 +219,7 @@ class LocalNode(
 
     @Suppress("BlockingMethodInNonBlockingContext")
     override suspend fun handleSnapshot(inputs: Flow<ReplicaNode.Snapshot.Input>): ReplicaNode.Snapshot.Output {
-        return TemporaryFile("snapshot").use { file ->
+        return TemporaryFile(Snapshot.COMPRESSED_SNAPSHOT_FILENAME).use { file ->
             var lastInput: ReplicaNode.Snapshot.Input? = null
             // Perform some validations while reading the stream in order to avoid waiting for the whole process to
             // complete. This is a fail fast mechanism and it does not mean the snapshot will succeed if these primary
@@ -226,7 +231,7 @@ class LocalNode(
                 // We ensure the request is being issued by the node we consider the leader.
                 val leaderId = input.leaderId
                 val leaderTerm = input.leaderTerm
-                locked.withLock(HANDLE_SNAPSHOT_OPERATION) { state ->
+                locked.withLock(HANDLE_SNAPSHOT_OPERATION, input.requestId) { state ->
                     state.ensureValidLeader(leaderId, leaderTerm)
                 }
             }
@@ -242,7 +247,7 @@ class LocalNode(
             // A snapshot request is sent by the leader when it detects the replica is behind the acceptable threshold.
             // If the state drift between the leader and the replica is small, the period heartbeat between the leader
             // and the replica is sufficient for the replica to reconstruct its state.
-            return@use locked.withLock(HANDLE_SNAPSHOT_OPERATION) { state ->
+            return@use locked.withLock(HANDLE_SNAPSHOT_OPERATION, lastInput!!.requestId) { state ->
                 val leaderId = lastInput!!.leaderId
                 val leaderTerm = lastInput!!.leaderTerm
 
@@ -257,15 +262,15 @@ class LocalNode(
                 // contents of the snapshot file.
                 val lastIncludedLogIndex = lastInput!!.lastIncludedLogIndex
                 val lastIncludedLogTerm = lastInput!!.lastIncludedLogTerm
-                state.restoreSnapshot(lastIncludedLogIndex, lastIncludedLogTerm, file.toPath())
+                state.restoreSnapshot(lastIncludedLogIndex, lastIncludedLogTerm, file.toPath().parent)
 
-                logger.info("Snapshot successfully loaded for input=[{}]", lastInput)
+                logger.info("Snapshot successfully loaded for input [{}]", lastInput)
                 return@withLock ReplicaNode.Snapshot.Output(state.metadata.consensusMetadata.currentTerm)
             }
         }
     }
 
-    private fun appendItem(state: UnsafeLocalNodeState, items: List<LogItem>) {
+    private fun appendItem(operationId: String, state: UnsafeLocalNodeState, items: List<LogItem> = emptyList()) {
         // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
         // the leader for the current term.
         val consensusMetadata = state.metadata.consensusMetadata
@@ -282,7 +287,7 @@ class LocalNode(
         // entries that we think the remote node will need to catch up with leader's log. In order to do so, we use
         // the remote#nextLogIndex and remote#matchLogIndex information.
         val remoteStates = try {
-            remotes.appendItems(state.metadata, state.log, state.getLatestSnapshot())
+            remotes.appendItems(operationId, state.metadata, state.log, state.getLatestSnapshot())
         } catch (e: ReplyTermInvariantException) {
             // Remotes will throw term invariant exception whenever they detect that their term is greater than the
             // node that generated the append request (case of 'this' node since it's performing the append
@@ -292,8 +297,10 @@ class LocalNode(
         }
 
         // Verify replication consensus status across majority in the cluster.
+        val remoteMatchLogIndexes = remoteStates.map { it.matchLogIndex }
+        logger.info("Updating commit index with remote match indexes [{}]", remoteMatchLogIndexes)
         val matchIndexes = mutableListOf<Long>()
-            .apply { remoteStates.forEach { add(it.matchLogIndex.value) } }
+            .apply { remoteMatchLogIndexes.forEach { add(it.value) } }
             .apply { add(lastLogItemIndex.value) }
             .sorted()
         val commitIndex = Index(matchIndexes[remotes.remotesCount / 2])
@@ -312,13 +319,14 @@ class LocalNode(
 
     private fun createElectionCallback(): Callback {
         return {
+            val operationId = UUID.randomUUID().toString()
             logger.info("Starting a new election")
             // Collect votes from remotes in the cluster. If we detect a violation of the term invariant, we stop the
             // process and transition the current node to follower mode.
-            val votes = locked.withLock(REQUEST_VOTE_OPERATION) { state ->
+            val votes = locked.withLock(REQUEST_VOTE_OPERATION, operationId) { state ->
                 state.transitionToCandidate()
                 try {
-                    remotes.requestVote(state.metadata, state.log)
+                    remotes.requestVote(operationId, state.metadata, state.log)
                 } catch (e: ReplyTermInvariantException) {
                     state.transitionToFollower(e.remoteTerm)
                     throw e
@@ -330,7 +338,7 @@ class LocalNode(
             }
             // Check whether candidate node won the election. Here we add '1' to total to take into account the vote of
             // the current node, which of course is voting for itself.
-            locked.withLock(REQUEST_VOTE_OPERATION) { state ->
+            locked.withLock(REQUEST_VOTE_OPERATION, operationId) { state ->
                 val total = 1 + votes.map { if (it) 1 else 0 }.sum()
                 if (total > remotes.remotesCount / 2) {
                     logger.info("Node has been elected as leader")
@@ -348,8 +356,9 @@ class LocalNode(
     private fun createHeartbeatCallback(): Callback {
         return {
             try {
+                val operationId = UUID.randomUUID().toString()
                 logger.info("Started heartbeat with followers")
-                locked.withLock(HEARTBEAT_OPERATION) { state -> appendItem(state, emptyList()) }
+                locked.withLock(HEARTBEAT_OPERATION, operationId) { state -> appendItem(operationId, state) }
                 logger.debug("Finished heartbeat with followers")
             } catch (e: Exception) {
                 logger.error("Error while executing heartbeat", e)
@@ -360,12 +369,13 @@ class LocalNode(
     private fun createSnapshotCallback(): Callback {
         return {
             try {
+                val operationId = UUID.randomUUID().toString()
                 logger.info("Taking a new snapshot of node's state")
-                val snapshot = locked.withLock(REQUEST_SNAPSHOT_OPERATION) { state ->
+                val snapshot = locked.withLock(REQUEST_SNAPSHOT_OPERATION, operationId) { state ->
                     state.takeSnapshot()
                     state.getLatestSnapshot()
                 }
-                logger.info("Finished taking snapshot: [{}]", snapshot)
+                logger.info("Finished taking snapshot [{}]", snapshot)
             } catch (e: Exception) {
                 logger.error("Error while executing snapshot", e)
             }
@@ -374,7 +384,8 @@ class LocalNode(
 
     private fun convertToLogItems(type: Type, lastItemIndex: Index, term: Term, data: List<ByteArray>): List<LogItem> {
         return data.mapIndexed { index, bytes ->
-            LogItem(type, lastItemIndex.incrementedBy(index.toLong()), term, bytes)
+            val newItemIndex = lastItemIndex.incrementedBy(index.toLong() + 1)
+            LogItem(type, newItemIndex, term, bytes)
         }
     }
 

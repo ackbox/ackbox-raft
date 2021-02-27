@@ -4,6 +4,7 @@ import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.log.SegmentedLog
 import com.ackbox.raft.networking.NodeNetworking
+import com.ackbox.raft.store.KV
 import com.ackbox.raft.store.KeyValueStore
 import com.ackbox.raft.support.Callback
 import com.ackbox.raft.support.LeaderMismatchException
@@ -23,7 +24,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.NotThreadSafe
 import javax.annotation.concurrent.ThreadSafe
@@ -36,10 +36,9 @@ import javax.annotation.concurrent.ThreadSafe
 class LocalNodeState(private val config: NodeConfig, private val unsafeState: UnsafeLocalNodeState) {
 
     private val logger: NodeLogger = NodeLogger.from(config.nodeId, LocalNodeState::class)
-    private val lock: Lock = ReentrantLock()
+    private val lock: ReentrantLock = ReentrantLock()
 
-    fun <T : Any> withLock(operationName: String, function: (UnsafeLocalNodeState) -> T): T {
-        val operationId = UUID.randomUUID().toString()
+    fun <T : Any> withLock(operationName: String, operationId: String, function: (UnsafeLocalNodeState) -> T): T {
         return try {
             // In order to avoid deadlocks, we fail fast if we are unable to acquire the lock to safely modify the
             // node's state. Requests are supposed to be retried once they fail with this exception.
@@ -51,7 +50,9 @@ class LocalNodeState(private val config: NodeConfig, private val unsafeState: Un
             result
         } finally {
             logger.info("Unlocked for operation [{}::{}]", operationName, operationId)
-            lock.unlock()
+            if (lock.isHeldByCurrentThread) {
+                lock.unlock()
+            }
         }
     }
 
@@ -143,6 +144,13 @@ class UnsafeLocalNodeState(
         }
     }
 
+    fun containsItem(externalIndex: Index, externalTerm: Term): Boolean {
+        val lastAppliedLogIndex = metadata.commitMetadata.lastAppliedLogIndex
+        val lastAppliedLogTerm = metadata.commitMetadata.lastAppliedLogTerm
+        val containsInSnapshot = lastAppliedLogIndex >= externalIndex && lastAppliedLogTerm <= externalTerm
+        return log.containsItem(externalIndex, externalTerm) || containsInSnapshot
+    }
+
     fun appendLogItems(items: List<LogItem>): Index {
         log.appendItems(items)
         return log.getLastItemIndex()
@@ -157,9 +165,9 @@ class UnsafeLocalNodeState(
         }
         logger.info("Set commitIndex to [{}] from leaderCommitIndex [{}]", commitIndex, leaderCommitIndex)
         // If commitIndex > lastApplied, increment lastApplied, apply log[lastApplied] to state machine.
-        val lastAppliedLogIndex = commitMetadata.lastAppliedLogIndex
-        if (commitIndex > lastAppliedLogIndex) {
-            (lastAppliedLogIndex.value..commitIndex.value).forEach { index ->
+        val nextAppliedLogIndex = commitMetadata.lastAppliedLogIndex.incremented()
+        if (commitIndex > nextAppliedLogIndex) {
+            (nextAppliedLogIndex.value..commitIndex.value).forEach { index ->
                 val item = log.getItem(Index(index)) ?: throw IllegalStateException("Corrupted log at index [$index]")
                 when (item.type) {
                     LogItem.Type.STORE_CHANGE -> store.applyValue(item.value)
@@ -177,15 +185,18 @@ class UnsafeLocalNodeState(
 
     fun restoreSnapshot(lastIncludedLogIndex: Index, lastIncludedLogTerm: Term, sourceDataPath: Path) {
         // We try to find an item in the current node's log that matches the index and term from the snapshot provided.
-        // If the item is found, it means that the log matching property is satisfied, thus all subsequent items
-        // (if existent) are compatible with the leader's.
+        // If the item is found, it means that the log matching property is satisfied, thus all previous log items
+        // (if existent) are compatible with the leader's log items.
         if (log.containsItem(lastIncludedLogIndex, lastIncludedLogTerm)) {
+            logger.warn("Node state is already up to date - no need to restore snapshot")
             return
         }
 
         // If no item is found, we replace the state machine's state with the snapshot provided as well as reset the
         // logs so that the leader can properly replicate its own.
+        logger.info("Loading snapshot from [{}]", sourceDataPath)
         snapshot = Snapshot.fromCompressedData(sourceDataPath, config.snapshotPath)
+        logger.info("Restoring snapshot [{}]", snapshot)
 
         store.restoreSnapshot(snapshot.dataPath)
         networking.restoreSnapshot(snapshot.dataPath)
@@ -199,9 +210,10 @@ class UnsafeLocalNodeState(
 
     fun takeSnapshot() {
         val snapshotPath = Files.createTempDirectory(UUID.randomUUID().toString())
+        val lastIncludedLogIndex = metadata.commitMetadata.lastAppliedLogIndex
+        val lastIncludedLogTerm = metadata.commitMetadata.lastAppliedLogTerm
+        logger.info("Snapshot lastLogIndex=[{}] and lastLogTerm=[{}]", lastIncludedLogIndex, lastIncludedLogTerm)
         try {
-            val lastIncludedLogIndex = metadata.commitMetadata.lastAppliedLogIndex
-            val lastIncludedLogTerm = metadata.commitMetadata.lastAppliedLogTerm
             store.takeSnapshot(snapshotPath)
             networking.takeSnapshot(snapshotPath)
             log.truncateBeforeNonInclusive(lastIncludedLogIndex)
@@ -266,6 +278,14 @@ class UnsafeLocalNodeState(
         // Load node's log and trim it before the snapshot's last included log index to save some storage space.
         log.open()
         log.truncateBeforeNonInclusive(snapshot.lastIncludedLogIndex)
+        if (log.getFirstItemIndex().isUndefined()) {
+            // The marker item is default entry that is added to the very first segment. The marker item saves us from
+            // performing several checks, leaving the implementation cleaner and simpler.
+            val key = UUID.randomUUID().toString()
+            val data = KV(key, ByteBuffer.wrap(key.toByteArray())).toByteArray()
+            val markerItem = LogItem(LogItem.Type.STORE_CHANGE, Index.UNDEFINED, Term.UNDEFINED, data)
+            log.appendItems(listOf(markerItem))
+        }
 
         // Update node's metadata according to the snapshot metadata and transition to follower mode.
         metadata.updateCommitMetadata(index, term, commitIndex)

@@ -21,14 +21,17 @@ message AddNodeRequest {
   // Request timestamp (wall clock from issuer).
   int64 timestamp = 1;
 
+  // Request unique identifier.
+  string requestId = 2;
+
   // Node's unique identifier.
-  string nodeId = 2;
+  string nodeId = 3;
 
   // Node's hostname or IP address.
-  string host = 3;
+  string host = 4;
 
   // Node's port.
-  int32 port = 4;
+  int32 port = 5;
 }
 
 // The add node response message.
@@ -60,14 +63,17 @@ message RemoveNodeRequest {
   // Request timestamp (wall clock from issuer).
   int64 timestamp = 1;
 
+  // Request unique identifier.
+  string requestId = 2;
+
   // Node's unique identifier.
-  string nodeId = 2;
+  string nodeId = 3;
 
   // Node's hostname or IP address.
-  string host = 3;
+  string host = 4;
 
   // Node's port.
-  int32 port = 4;
+  int32 port = 5;
 }
 
 // The remove node response message.

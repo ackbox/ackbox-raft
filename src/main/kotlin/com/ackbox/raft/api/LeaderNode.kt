@@ -35,7 +35,7 @@ interface LeaderNode {
     fun getItem(input: GetItem.Input): GetItem.Output
 
     object AddNode {
-        data class Input(val address: NodeAddress)
+        data class Input(val requestId: String, val address: NodeAddress)
         data class Output(val leaderId: String?)
     }
 
@@ -45,7 +45,7 @@ interface LeaderNode {
     fun addNode(input: AddNode.Input): AddNode.Output
 
     object RemoveNode {
-        data class Input(val address: NodeAddress)
+        data class Input(val requestId: String, val address: NodeAddress)
         data class Output(val leaderId: String?)
     }
 

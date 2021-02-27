@@ -18,7 +18,7 @@ class ManagementNodeApi(private val node: LeaderNode, private val clock: Clock) 
         logger.debug("Received add node request [{}]", request)
         return try {
             val address = NodeNetAddress(request.nodeId, request.host, request.port)
-            val output = node.addNode(LeaderNode.AddNode.Input(address))
+            val output = node.addNode(LeaderNode.AddNode.Input(request.requestId, address))
             createSuccessAddNodeReply(output.leaderId)
         } catch (e: NotLeaderException) {
             logger.warn("Received add node request while not leader=[{}]", e.knownLeaderId, e)
@@ -36,7 +36,7 @@ class ManagementNodeApi(private val node: LeaderNode, private val clock: Clock) 
         logger.debug("Received remove node request [{}]", request)
         return try {
             val address = NodeNetAddress(request.nodeId, request.host, request.port)
-            val output = node.removeNode(LeaderNode.RemoveNode.Input(address))
+            val output = node.removeNode(LeaderNode.RemoveNode.Input(request.requestId, address))
             createSuccessRemoveNodeReply(output.leaderId)
         } catch (e: NotLeaderException) {
             logger.warn("Received remove node request while not leader=[{}]", e.knownLeaderId, e)

@@ -33,12 +33,12 @@ class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>) 
         logger.info("Node [{}] was mapped to remote [{}]", channel.id, remoteNode)
     }
 
-    fun appendItems(metadata: Metadata, log: ReplicatedLog, snapshot: Snapshot): List<RemoteNodeState> {
-        return broadcastInParallel { remote -> remote.sendAppend(metadata, log, snapshot) }
+    fun appendItems(requestId: String, metadata: Metadata, log: ReplicatedLog, snapshot: Snapshot): List<RemoteNodeState> {
+        return broadcastInParallel { remote -> remote.sendAppend(requestId, metadata, log, snapshot) }
     }
 
-    fun requestVote(metadata: Metadata, log: ReplicatedLog): List<Boolean> {
-        return broadcastInParallel { remote -> remote.sendVote(metadata, log) }
+    fun requestVote(requestId: String, metadata: Metadata, log: ReplicatedLog): List<Boolean> {
+        return broadcastInParallel { remote -> remote.sendVote(requestId, metadata, log) }
     }
 
     fun resetState(nextLogIndex: Index) {
@@ -51,9 +51,10 @@ class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>) 
         }
     }
 
-    private fun <T : Any> broadcastInParallel(consumer: suspend (RemoteNode) -> T): List<T> {
+    private fun <T : Any> broadcastInParallel(consumer: (RemoteNode) -> T): List<T> {
         return runBlocking(Dispatchers.IO) {
-            remotes.values.map { remote -> async { consumer(remote) } }.map { it.await() }
+            remotes.values.filter { it.channel.id != config.nodeId }
+                .map { remote -> async { consumer(remote) } }.map { it.await() }
         }
     }
 

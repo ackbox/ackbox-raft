@@ -12,8 +12,8 @@ object Fixtures {
 
     fun createLogItem(
         type: LogItem.Type = LogItem.Type.STORE_CHANGE,
-        index: Index = Index.UNDEFINED,
-        term: Term = Term.UNDEFINED,
+        index: Index = Index(krandom()),
+        term: Term = Term(krandom()),
         data: ByteArray = DATA_8_BYTES
     ): LogItem {
         return LogItem(type, index, term, data)

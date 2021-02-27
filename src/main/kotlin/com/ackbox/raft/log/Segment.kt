@@ -20,7 +20,7 @@ data class Segment(val firstItemIndex: Index, private val path: Path, private va
 
     /**
      * Index of last item stored in the segment. Segment is created without any entries.
-     * At first last item index is set to [firstItemIndex - 1]
+     * At first last item index is set to [firstItemIndex - 1].
      */
     var lastItemIndex: Index = firstItemIndex.decremented()
         private set
@@ -28,6 +28,8 @@ data class Segment(val firstItemIndex: Index, private val path: Path, private va
     fun canFit(item: LogItem): Boolean = isOpen() && offsetInBytes + item.getSizeInBytes() <= maxSizeInBytes
 
     fun isEmpty(): Boolean = lastItemIndex - firstItemIndex < Index(0)
+
+    fun contains(index: Index): Boolean = index in firstItemIndex..lastItemIndex
 
     fun append(item: LogItem) {
         ensureSegmentOpen()

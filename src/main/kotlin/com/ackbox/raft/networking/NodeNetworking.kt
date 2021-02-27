@@ -70,16 +70,22 @@ class NodeNetworking(private val config: NodeConfig) : StateMachine {
     override fun takeSnapshot(destinationPath: Path) {
         logger.info("Taking a snapshot and saving to [{}]", destinationPath)
         val filePath = Paths.get(destinationPath.toAbsolutePath().toString(), SNAPSHOT_FILENAME)
-        synchronized(channels) { SERIALIZER.writeValue(filePath.toFile(), channels.mapValues { it.value.address }) }
+        synchronized(channels) {
+            val values = channels.mapValues { it.value.address }
+            SERIALIZER.writeValue(filePath.toFile(), SerializerWrapper(values))
+        }
     }
 
     override fun restoreSnapshot(sourcePath: Path) {
         logger.info("Restoring a snapshot from [{}]", sourcePath)
-        val filePath = Paths.get(sourcePath.toAbsolutePath().toString(), SNAPSHOT_FILENAME)
+        val file = Paths.get(sourcePath.toAbsolutePath().toString(), SNAPSHOT_FILENAME).toFile()
+        if (!file.exists()) {
+            return
+        }
         synchronized(channels) {
-            val from = SERIALIZER.readValue<Map<String, NodeAddress>>(filePath.toFile())
+            val values = SERIALIZER.readValue<SerializerWrapper>(file)
             channels.values.forEach { onChannelRemoved?.invoke(it) }
-            channels.putAll(from.mapValues { it.value.toChannel() })
+            channels.putAll(values.data.mapValues { it.value.toChannel() })
             channels.values.forEach { onChannelAdded?.invoke(it) }
         }
     }
@@ -87,6 +93,8 @@ class NodeNetworking(private val config: NodeConfig) : StateMachine {
     private fun createChannels(): ConcurrentHashMap<String, NamedChannel> {
         return ConcurrentHashMap(config.remotes.map { it.nodeId to it.toChannel() }.toMap())
     }
+
+    internal data class SerializerWrapper(val data: Map<String, NodeAddress>)
 
     companion object {
 

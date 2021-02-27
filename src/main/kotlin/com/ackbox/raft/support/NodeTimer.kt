@@ -59,15 +59,15 @@ class NodeTimer(private val config: NodeConfig) {
     }
 
     private fun createElectionTimer(): Timer {
-        return Timer("ElectionTimer::${config.nodeId}")
+        return Timer("ElectionTimer")
     }
 
     private fun createHeartbeatTimer(): Timer {
-        return Timer("HeartbeatTimer::${config.nodeId}")
+        return Timer("HeartbeatTimer")
     }
 
     private fun createSnapshotTimer(): Timer {
-        return Timer("SnapshotTimer::${config.nodeId}")
+        return Timer("SnapshotTimer")
     }
 
     private fun safely(callback: Callback?) {

@@ -140,6 +140,16 @@ internal class SegmentedLogTest {
     }
 
     @Test
+    fun `should be able to identify whether a marker log entry`() {
+        val config = createConfig(krandom())
+        val internalItem = Fixtures.createLogItem().copy(index = Index.UNDEFINED, term = Term(1))
+        val externalItem = Fixtures.createLogItem().copy(index = Index.UNDEFINED, term = Term(2))
+
+        SegmentedLog(config).use { log -> log.appendItems(listOf(internalItem)) }
+        SegmentedLog(config).use { log -> assertTrue(log.containsItem(externalItem.index, externalItem.term)) }
+    }
+
+    @Test
     fun `should be able to identify whether a log entry matches index and term`() {
         val config = createConfig(krandom())
         val item = Fixtures.createLogItem()

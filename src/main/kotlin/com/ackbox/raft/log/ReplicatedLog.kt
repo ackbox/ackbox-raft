@@ -3,12 +3,14 @@ package com.ackbox.raft.log
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
 import com.ackbox.raft.types.Term
-import org.slf4j.LoggerFactory
+import org.slf4j.Logger
 
 /**
  * Interface for Raft's replicated log.
  */
 interface ReplicatedLog {
+
+    val logger: Logger
 
     /**
      * Restore log from persistent storage.
@@ -66,14 +68,20 @@ interface ReplicatedLog {
      * Check whether the log contains an entry at [externalIndex] matching [externalTerm].
      */
     fun containsItem(externalIndex: Index, externalTerm: Term): Boolean {
+        if (externalIndex.isUndefined()) {
+            val internalTerm = getItem(getLastItemIndex())?.term ?: Term.UNDEFINED
+            logger.info("Marker log entry check: externalTerm=[{}] and internalTerm=[{}]", externalTerm, internalTerm)
+            return true
+        }
         val lastItemIndex = getLastItemIndex()
         if (externalIndex > lastItemIndex) {
-            LOG.info("Log is not caught up: externalIndex=[{}] and internalIndex=[{}]", externalIndex, lastItemIndex)
+            logger.info("Log is not caught up: externalIndex=[{}] and internalIndex=[{}]", externalIndex, lastItemIndex)
             return false
         }
         val entry = getItem(externalIndex)
         if (entry == null || entry.term != externalTerm) {
-            LOG.info("Log is not caught up: externalTerm=[{}] and internalTerm=[{}]", externalTerm, entry?.term)
+            val term = entry?.term ?: Term.UNDEFINED
+            logger.info("Log is not caught up: externalTerm=[{}] and internalTerm=[{}]", externalTerm, term)
             return false
         }
         return true
@@ -92,19 +100,14 @@ interface ReplicatedLog {
         if (item != null) {
             if (item.term != externalTerm) {
                 val isAhead = item.term > externalTerm
-                LOG.info("Checking log entry term: logAhead=[{}]", isAhead)
+                logger.info("Checking log entry term: logAhead=[{}]", isAhead)
                 return isAhead
             }
             val isAhead = item.index > externalIndex
-            LOG.info("Checking log entry index: logAhead=[{}]", isAhead)
+            logger.info("Checking log entry index: logAhead=[{}]", isAhead)
             return isAhead
         }
-        LOG.info("Log entry at externalTerm=[{}] is null", externalTerm)
+        logger.info("Log entry at externalTerm=[{}] is null", externalTerm)
         return false
-    }
-
-    companion object {
-
-        private val LOG = LoggerFactory.getLogger(ReplicatedLog::class.java)
     }
 }

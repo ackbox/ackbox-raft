@@ -4,9 +4,7 @@ import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.core.StateMachine
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.SERIALIZER
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
@@ -32,17 +30,22 @@ class KeyValueStore(config: NodeConfig) : StateMachine {
     override fun takeSnapshot(destinationPath: Path) {
         logger.info("Taking a snapshot of [{}] entries and saving to [{}]", store.size, destinationPath)
         val filePath = Paths.get(destinationPath.toAbsolutePath().toString(), SNAPSHOT_FILENAME)
-        synchronized(store) { SERIALIZER.writeValue(filePath.toFile(), store) }
+        synchronized(store) { SERIALIZER.writeValue(filePath.toFile(), SerializerWrapper(store)) }
     }
 
     override fun restoreSnapshot(sourcePath: Path) {
         logger.info("Restoring a snapshot from [{}]", sourcePath)
-        val filePath = Paths.get(sourcePath.toAbsolutePath().toString(), SNAPSHOT_FILENAME)
+        val file = Paths.get(sourcePath.toAbsolutePath().toString(), SNAPSHOT_FILENAME).toFile()
+        if (!file.exists()) {
+            return
+        }
         synchronized(store) {
             store.clear()
-            store.putAll(SERIALIZER.readValue<Map<String, KV>>(filePath.toFile()))
+            store.putAll(SERIALIZER.readValue<SerializerWrapper>(file).data)
         }
     }
+
+    internal data class SerializerWrapper(val data: Map<String, KV>)
 
     companion object {
 

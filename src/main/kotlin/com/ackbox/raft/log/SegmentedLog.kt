@@ -1,8 +1,8 @@
 package com.ackbox.raft.log
 
 import com.ackbox.raft.config.NodeConfig
-import com.ackbox.raft.types.Index
 import com.ackbox.raft.support.NodeLogger
+import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
 import com.google.common.annotations.VisibleForTesting
 import java.nio.file.Files
@@ -18,8 +18,9 @@ import kotlin.streams.asSequence
 @NotThreadSafe
 class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, SegmentedLog::class)
     private val segments: TreeMap<Index, Segment> = TreeMap<Index, Segment>()
+
+    override val logger: NodeLogger = NodeLogger.from(config.nodeId, SegmentedLog::class)
 
     override fun open() {
         logger.info("Opening segments from [{}]", config.logPath)
@@ -95,7 +96,8 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
     override fun truncateBeforeNonInclusive(index: Index) {
         logger.info("Truncating logs before index [{}]", index)
         val toRemove = segments.navigableKeySet().headSet(index).toSet()
-        toRemove.forEach { segmentIndex ->
+        // We need to filter out segments that may contain the index passed as parameter.
+        toRemove.filterNot { segments[it]?.contains(index) ?: true }.forEach { segmentIndex ->
             val segmentToRemove = segments.remove(segmentIndex)
             segmentToRemove?.safelyClose()
             segmentToRemove?.safelyDelete()
