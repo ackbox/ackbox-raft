@@ -24,48 +24,36 @@ import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.NotThreadSafe
 import javax.annotation.concurrent.ThreadSafe
 
+typealias Function<T> = (PartitionState) -> T
+
 /**
- * State for the current local node. This class encapsulates an instance of [PartitionState]. It only allows
+ * State for the current local node. This class encapsulates instances of [PartitionState]. It only allows
  * external object to modify [PartitionState] under a lock to prevent issues due to concurrent mutations.
  */
 @ThreadSafe
-class LocalNodeState(private val factory: PartitionStateFactory) {
+class LocalNodeState(private val states: Map<Partition, LockedPartitionState>) {
 
-    private val states: MutableMap<Partition, LockedPartitionState> = ConcurrentHashMap<Partition, LockedPartitionState>()
-
-    fun <T : Any> withLock(
-        partition: Partition,
-        operationName: String,
-        operationId: String,
-        function: (PartitionState) -> T
-    ): T {
-        states.computeIfAbsent(partition) { factory.create(partition) }
+    fun <T : Any> withLock(partition: Partition, operationName: String, operationId: String, function: Function<T>): T {
         return states.getValue(partition).withLock(operationName, operationId, function)
     }
 
     companion object {
 
         fun fromConfig(config: NodeConfig, networking: NodeNetworking): LocalNodeState {
-            return LocalNodeState(PartitionStateFactory(config, networking))
+            val states = config.partitions.map { partition ->
+                val store = KeyValueStore.fromConfig(config)
+                val metadata = Metadata(config.nodeId, partition)
+                val log = SegmentedLog(config, partition)
+                val state = PartitionState(config, networking, store, metadata, log)
+                partition to LockedPartitionState(config, partition, state)
+            }
+            return LocalNodeState(states.toMap())
         }
-    }
-}
-
-@ThreadSafe
-class PartitionStateFactory(private val config: NodeConfig, private val networking: NodeNetworking) {
-
-    fun create(partition: Partition): LockedPartitionState {
-        val store = KeyValueStore.fromConfig(config)
-        val metadata = Metadata(config.nodeId, partition)
-        val log = SegmentedLog(config, partition)
-        val state = PartitionState(config, networking, store, metadata, log)
-        return LockedPartitionState(config, partition, state)
     }
 }
 
@@ -264,7 +252,7 @@ class PartitionState(
     }
 
     fun getLatestSnapshot(): Snapshot {
-        return Snapshot.load(config.getSnapshotPath(metadata.partition),)
+        return Snapshot.load(config.getSnapshotPath(metadata.partition))
     }
 
     fun updateVote(candidateId: String) {
@@ -314,7 +302,7 @@ class PartitionState(
             // The marker item is default entry that is added to the very first segment. The marker item saves us from
             // performing several checks, leaving the implementation cleaner and simpler.
             val key = UUID.randomUUID().toString()
-            val data = KV(key, ByteBuffer.wrap(key.toByteArray())).toByteArray()
+            val data = KV(key, key.toByteArray()).toByteArray()
             val markerItem = LogItem(LogItem.Type.STORE_CHANGE, Index.UNDEFINED, Term.UNDEFINED, data)
             log.appendItems(listOf(markerItem))
         }

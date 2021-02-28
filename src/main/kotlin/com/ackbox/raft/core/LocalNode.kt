@@ -1,14 +1,12 @@
 package com.ackbox.raft.core
 
-import com.ackbox.raft.api.LeaderNode
-import com.ackbox.raft.api.LeaderNode.AddNode
-import com.ackbox.raft.api.LeaderNode.GetEntry
-import com.ackbox.raft.api.LeaderNode.RemoveNode
-import com.ackbox.raft.api.LeaderNode.SetEntry
-import com.ackbox.raft.api.ReplicaNode
-import com.ackbox.raft.api.ReplicaNode.Append
-import com.ackbox.raft.api.ReplicaNode.Vote
 import com.ackbox.raft.config.NodeConfig
+import com.ackbox.raft.core.LeaderNode.AddNode
+import com.ackbox.raft.core.LeaderNode.GetEntry
+import com.ackbox.raft.core.LeaderNode.RemoveNode
+import com.ackbox.raft.core.LeaderNode.SetEntry
+import com.ackbox.raft.core.ReplicaNode.Append
+import com.ackbox.raft.core.ReplicaNode.Vote
 import com.ackbox.raft.networking.NodeNetworking
 import com.ackbox.raft.networking.NodeNetworkingChange
 import com.ackbox.raft.store.KV
@@ -79,8 +77,7 @@ class LocalNode(
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
-            val data = listOf(entry.value.array())
-            val items = convertToLogItems(Type.STORE_CHANGE, lastItemIndex, leaderTerm, data)
+            val items = convertToLogItems(Type.STORE_CHANGE, lastItemIndex, leaderTerm, listOf(entry.value))
             appendItem(operationId, state, items)
             return@withLock SetEntry.Output(consensusMetadata.leaderId)
         }
@@ -105,7 +102,8 @@ class LocalNode(
 
     override fun addNode(input: AddNode.Input): AddNode.Output {
         val partition = Partition.GLOBAL
-        val snapshot = locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, input.requestId) { state ->
+        val operationId = input.requestId
+        val snapshot = locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, operationId) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
             // the leader for the current term.
             val consensusMetadata = state.metadata.consensusMetadata
@@ -118,25 +116,18 @@ class LocalNode(
         // Try to activate the new node by sending the latest snapshot. In this process, we create a temporary remote
         // facade in order to send the latest leader's snapshot. If it's successful, the leader will commit a log item
         // that will cause the new remote to be added to the leader's networking setup.
-        val metadata =
-            locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, input.requestId) { state -> state.metadata }
-        val channel = input.address.toChannel()
-        try {
-            val remoteNode = RemoteNode(config, channel)
-            remoteNode.sendSnapshot(input.requestId, metadata, snapshot)
-        } finally {
-            channel.runCatching { shutdownNow() }
-        }
+        val metadata = locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, operationId) { state -> state.metadata }
+        remotes.sendSnapshotTo(input.address, operationId, metadata, snapshot)
 
         // Replicate the configuration change.
-        return locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, input.requestId) { state ->
+        return locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, operationId) { state ->
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
             val change = NodeNetworkingChange(NodeNetworkingChange.Type.ADDED, input.address)
             val data = listOf(change.toByteArray())
             val items = convertToLogItems(Type.NETWORKING_CHANGE, lastItemIndex, leaderTerm, data)
-            appendItem(input.requestId, state, items)
+            appendItem(operationId, state, items)
             return@withLock AddNode.Output(consensusMetadata.leaderId)
         }
     }
@@ -155,7 +146,7 @@ class LocalNode(
         }
     }
 
-    override suspend fun handleAppend(input: Append.Input): Append.Output {
+    override fun handleAppend(input: Append.Input): Append.Output {
         // We ensure the issuer of the request is a node that we know about.
         remotes.ensureValidRemote(input.leaderId)
 
@@ -208,7 +199,7 @@ class LocalNode(
         }
     }
 
-    override suspend fun handleVote(input: Vote.Input): Vote.Output {
+    override fun handleVote(input: Vote.Input): Vote.Output {
         // We ensure the issuer of the request is a node that we know about.
         remotes.ensureValidRemote(input.candidateId)
 

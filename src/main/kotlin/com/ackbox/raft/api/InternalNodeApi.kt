@@ -2,6 +2,7 @@ package com.ackbox.raft.api
 
 import com.ackbox.raft.api.AppendRequest.EntryType
 import com.ackbox.raft.api.InternalNodeGrpcKt.InternalNodeCoroutineImplBase
+import com.ackbox.raft.core.ReplicaNode
 import com.ackbox.raft.support.LeaderMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger

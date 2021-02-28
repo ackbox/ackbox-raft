@@ -25,14 +25,51 @@ import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.ThreadSafe
 
-@ThreadSafe
-class RemoteNode(private val config: NodeConfig, val channel: NamedChannel) {
+/**
+ * Interface for a component enabling interaction with remove nodes in the cluster.
+ */
+interface RemoteNode {
 
-    private val logger: NodeLogger = NodeLogger.forNode("${config.nodeId}->${channel.id}", RemoteNode::class)
+    /**
+     * Unique identifier of the remote node in the cluster.
+     */
+    val remoteId: String
+
+    /**
+     * Sends an append log item request to the remote. Internally, the [RemoteNode] instance uses its state in order
+     * to compute the log items that need to be sent over the network. If the current [log] does not contain the required
+     * log items allowing the remote to catch up, a [snapshot] is sent.
+     */
+    fun sendAppend(requestId: String, metadata: Metadata, log: ReplicatedLog, snapshot: Snapshot): RemoteNodeState
+
+    /**
+     * Sends a vote request to the remote as a result of a leader election process.
+     */
+    fun sendVote(requestId: String, metadata: Metadata, log: ReplicatedLog): Boolean
+
+    /**
+     * Sends a snapshot to the remote. This operation is required whenever the remote requires log items that are not
+     * available in the leader's log in order to catch up.
+     */
+    fun sendSnapshot(requestId: String, metadata: Metadata, snapshot: Snapshot)
+
+    /**
+     * Resets the remotes state. For more information on what each remote instance keeps track of, see [RemoteNodeState].
+     */
+    fun resetState(nextLogIndex: Index)
+}
+
+@ThreadSafe
+class RemoteChannelNode(private val config: NodeConfig, val channel: NamedChannel) : RemoteNode {
+
+    private val logger: NodeLogger = NodeLogger.forNode(generateId(), RemoteChannelNode::class)
+
     private val remoteClient: InternalNodeCoroutineStub = InternalNodeCoroutineStub(channel)
     private val remoteState: AtomicReference<RemoteNodeState> = AtomicReference(RemoteNodeState())
 
-    fun sendAppend(requestId: String, metadata: Metadata, log: ReplicatedLog, snapshot: Snapshot): RemoteNodeState {
+    override val remoteId: String = channel.id
+
+    override fun sendAppend(requestId: String, metadata: Metadata, log: ReplicatedLog, snapshot: Snapshot): RemoteNodeState {
         // Update internal representation of the follower node according to the reply. Lock on the
         // state and return a consistent snapshot updated according to the response from the peer.
         val partition = metadata.partition
@@ -103,7 +140,7 @@ class RemoteNode(private val config: NodeConfig, val channel: NamedChannel) {
         }
     }
 
-    fun sendVote(requestId: String, metadata: Metadata, log: ReplicatedLog): Boolean {
+    override fun sendVote(requestId: String, metadata: Metadata, log: ReplicatedLog): Boolean {
         // Initiate voting procedure with follower node.
         val partition = metadata.partition
         val candidateTerm = metadata.consensusMetadata.currentTerm
@@ -132,12 +169,12 @@ class RemoteNode(private val config: NodeConfig, val channel: NamedChannel) {
         return reply.status == VoteReply.Status.VOTE_GRANTED
     }
 
-    fun sendSnapshot(requestId: String, metadata: Metadata, snapshot: Snapshot) {
+    override fun sendSnapshot(requestId: String, metadata: Metadata, snapshot: Snapshot) {
         // Do not use RPC timeout since snapshot transfers can be arbitrary long.
         runBlocking { sendSnapshotAsync(requestId, metadata, snapshot) }
     }
 
-    fun resetState(nextLogIndex: Index) {
+    override fun resetState(nextLogIndex: Index) {
         remoteState.updateAndGet { state -> state.copy(nextLogIndex = nextLogIndex) }
     }
 
@@ -240,6 +277,8 @@ class RemoteNode(private val config: NodeConfig, val channel: NamedChannel) {
     private fun warn(partition: Partition, pattern: String, vararg args: Any) {
         logger.warn("[partition=${partition.value}] $pattern", *args)
     }
+
+    private fun generateId(): String = "${config.nodeId}->${channel.id}"
 
     companion object {
 

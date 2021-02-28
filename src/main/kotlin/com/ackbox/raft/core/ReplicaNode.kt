@@ -1,4 +1,4 @@
-package com.ackbox.raft.api
+package com.ackbox.raft.core
 
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
@@ -35,7 +35,7 @@ interface ReplicaNode {
     /**
      * Perform replication of an item. Only replicas are supposed to receive this operation.
      */
-    suspend fun handleAppend(input: Append.Input): Append.Output
+    fun handleAppend(input: Append.Input): Append.Output
 
     object Vote {
         data class Input(
@@ -53,7 +53,7 @@ interface ReplicaNode {
     /**
      * Handle a vote request during a leader election. Only replicas are supposed to receive this operation.
      */
-    suspend fun handleVote(input: Vote.Input): Vote.Output
+    fun handleVote(input: Vote.Input): Vote.Output
 
     object Snapshot {
         data class Input(

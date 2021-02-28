@@ -2,6 +2,7 @@ package com.ackbox.raft.networking
 
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.core.StateMachine
+import com.ackbox.raft.networking.NodeNetworkingChange.Type
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.SERIALIZER
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -56,8 +57,8 @@ class NodeNetworking(private val config: NodeConfig) : StateMachine {
     override fun applyValue(value: ByteArray) {
         val change = NodeNetworkingChange.fromByteArray(value)
         val newChannel = when (change.type) {
-            NodeNetworkingChange.Type.ADDED -> change.address.toChannel()
-            NodeNetworkingChange.Type.REMOVED -> null
+            Type.ADDED -> change.address.toChannel()
+            Type.REMOVED -> null
         }
         channels.compute(change.address.nodeId) { nodeId: String, oldChannel: NamedChannel? ->
             oldChannel?.let { onChannelRemoved?.invoke(it) }
@@ -85,6 +86,7 @@ class NodeNetworking(private val config: NodeConfig) : StateMachine {
         synchronized(channels) {
             val values = SERIALIZER.readValue<SerializerWrapper>(file)
             channels.values.forEach { onChannelRemoved?.invoke(it) }
+            channels.clear()
             channels.putAll(values.data.mapValues { it.value.toChannel() })
             channels.values.forEach { onChannelAdded?.invoke(it) }
         }

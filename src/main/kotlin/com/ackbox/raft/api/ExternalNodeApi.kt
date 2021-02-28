@@ -1,8 +1,9 @@
 package com.ackbox.raft.api
 
 import com.ackbox.raft.api.ExternalNodeGrpcKt.ExternalNodeCoroutineImplBase
-import com.ackbox.raft.api.LeaderNode.GetEntry
-import com.ackbox.raft.api.LeaderNode.SetEntry
+import com.ackbox.raft.core.LeaderNode
+import com.ackbox.raft.core.LeaderNode.GetEntry
+import com.ackbox.raft.core.LeaderNode.SetEntry
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger

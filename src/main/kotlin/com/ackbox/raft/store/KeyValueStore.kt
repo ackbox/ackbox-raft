@@ -24,7 +24,7 @@ class KeyValueStore(config: NodeConfig) : StateMachine {
     override fun applyValue(value: ByteArray) {
         logger.info("Setting item [{}]", value)
         val kv = KV.fromByteArray(value)
-        store.computeIfAbsent(kv.key) { kv }
+        store[kv.key] = kv
     }
 
     override fun takeSnapshot(destinationPath: Path) {

@@ -1,6 +1,7 @@
 package com.ackbox.raft.api
 
 import com.ackbox.raft.api.ManagementNodeGrpcKt.ManagementNodeCoroutineImplBase
+import com.ackbox.raft.core.LeaderNode
 import com.ackbox.raft.networking.NodeNetAddress
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger

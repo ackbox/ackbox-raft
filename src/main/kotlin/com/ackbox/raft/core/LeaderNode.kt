@@ -1,7 +1,6 @@
-package com.ackbox.raft.api
+package com.ackbox.raft.core
 
 import com.ackbox.raft.networking.NodeAddress
-import com.ackbox.raft.store.KV
 import java.nio.ByteBuffer
 
 /**

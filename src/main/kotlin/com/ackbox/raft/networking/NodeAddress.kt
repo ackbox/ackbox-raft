@@ -15,7 +15,7 @@ import io.grpc.inprocess.InProcessServerBuilder
  * validate internal error cases. In system tests, an implementation allowing for simulating error conditions
  * can be used in order to tests failure conditions (e.g. packet loss, disconnections, etc).
  */
-interface NodeAddress {
+interface NodeAddress : Comparable<NodeAddress> {
 
     /**
      * Unique identifier for the node.
@@ -31,6 +31,8 @@ interface NodeAddress {
      * Converts the node address into a GRPC [NamedChannel] implementation.
      */
     fun toChannel(): NamedChannel
+
+    override fun compareTo(other: NodeAddress): Int = nodeId.compareTo(other.nodeId)
 }
 
 /**

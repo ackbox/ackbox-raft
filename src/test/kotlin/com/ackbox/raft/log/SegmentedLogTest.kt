@@ -4,6 +4,7 @@ import com.ackbox.raft.Fixtures
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.networking.NodeInmemoryAddress
 import com.ackbox.raft.types.Index
+import com.ackbox.raft.types.Partition
 import com.ackbox.raft.types.Randoms
 import com.ackbox.raft.types.Term
 import com.ackbox.raft.types.UNDEFINED_ID
@@ -30,8 +31,8 @@ internal class SegmentedLogTest {
         val items = (0 until firstOffset).map { offset ->
             Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset))
         }
-        SegmentedLog(config).use { log -> log.appendItems(items) }
-        SegmentedLog(config).use { log -> items.forEach { item -> assertEquals(item, log.getItem(item.index)) } }
+        createLog(config).use { log -> log.appendItems(items) }
+        createLog(config).use { log -> items.forEach { item -> assertEquals(item, log.getItem(item.index)) } }
     }
 
     @Test
@@ -41,7 +42,7 @@ internal class SegmentedLogTest {
         val items = (0 until expectedSegments).map { offset ->
             Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset), data = Ints.toByteArray(krandom()))
         }
-        val segmentedLog = SegmentedLog(config)
+        val segmentedLog = createLog(config)
         segmentedLog.use { log -> log.appendItems(items) }
         assertEquals(expectedSegments.toInt(), segmentedLog.getSegmentSize())
     }
@@ -53,7 +54,7 @@ internal class SegmentedLogTest {
         val items = (0 until expectedSegments).map { offset ->
             Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset), data = Ints.toByteArray(krandom()))
         }
-        val segmentedLog = SegmentedLog(config)
+        val segmentedLog = createLog(config)
         segmentedLog.use { log -> log.appendItems(items) }
         assertEquals(items.first().index, segmentedLog.getFirstItemIndex())
         assertEquals(items.last().index, segmentedLog.getLastItemIndex())
@@ -71,11 +72,11 @@ internal class SegmentedLogTest {
         }
         val mismatchItem = Fixtures.createLogItem(index = mismatchIndex, term = term2)
 
-        SegmentedLog(config).use { log ->
+        createLog(config).use { log ->
             log.appendItems(items)
             log.appendItems(listOf(mismatchItem))
         }
-        SegmentedLog(config).use { log ->
+        createLog(config).use { log ->
             (0 until prefixOffset).map { Index(it) }.forEach { index ->
                 when {
                     index < mismatchIndex -> assertEquals(items[index.value.toInt()], log.getItem(index))
@@ -92,9 +93,9 @@ internal class SegmentedLogTest {
         val items = (0 until Randoms.between(5, 20)).map { offset ->
             Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset))
         }
-        SegmentedLog(config).use { log -> log.appendItems(items) }
-        SegmentedLog(config).use { log -> log.clear() }
-        SegmentedLog(config).use { log -> items.forEach { assertNull(log.getItem(it.index)) } }
+        createLog(config).use { log -> log.appendItems(items) }
+        createLog(config).use { log -> log.clear() }
+        createLog(config).use { log -> items.forEach { assertNull(log.getItem(it.index)) } }
     }
 
     @Test
@@ -106,9 +107,9 @@ internal class SegmentedLogTest {
             Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset))
         }
 
-        SegmentedLog(config).use { log -> log.appendItems(items) }
-        SegmentedLog(config).use { log -> log.truncateBeforeNonInclusive(pivotIndex) }
-        SegmentedLog(config).use { log ->
+        createLog(config).use { log -> log.appendItems(items) }
+        createLog(config).use { log -> log.truncateBeforeNonInclusive(pivotIndex) }
+        createLog(config).use { log ->
             (0 until prefixOffset).map { Index(it) }.forEach { index ->
                 when {
                     index < pivotIndex -> assertNull(log.getItem(index))
@@ -127,9 +128,9 @@ internal class SegmentedLogTest {
             Fixtures.createLogItem(index = Index.UNDEFINED.incrementedBy(offset))
         }
 
-        SegmentedLog(config).use { log -> log.appendItems(items) }
-        SegmentedLog(config).use { log -> log.truncateAfterInclusive(pivotIndex) }
-        SegmentedLog(config).use { log ->
+        createLog(config).use { log -> log.appendItems(items) }
+        createLog(config).use { log -> log.truncateAfterInclusive(pivotIndex) }
+        createLog(config).use { log ->
             (0 until prefixOffset).map { Index(it) }.forEach { index ->
                 when {
                     index < pivotIndex -> assertEquals(items[index.value.toInt()], log.getItem(index))
@@ -145,8 +146,8 @@ internal class SegmentedLogTest {
         val internalItem = Fixtures.createLogItem().copy(index = Index.UNDEFINED, term = Term(1))
         val externalItem = Fixtures.createLogItem().copy(index = Index.UNDEFINED, term = Term(2))
 
-        SegmentedLog(config).use { log -> log.appendItems(listOf(internalItem)) }
-        SegmentedLog(config).use { log -> assertTrue(log.containsItem(externalItem.index, externalItem.term)) }
+        createLog(config).use { log -> log.appendItems(listOf(internalItem)) }
+        createLog(config).use { log -> assertTrue(log.containsItem(externalItem.index, externalItem.term)) }
     }
 
     @Test
@@ -154,8 +155,8 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val item = Fixtures.createLogItem()
 
-        SegmentedLog(config).use { log -> log.appendItems(listOf(item)) }
-        SegmentedLog(config).use { log -> assertTrue(log.containsItem(item.index, item.term)) }
+        createLog(config).use { log -> log.appendItems(listOf(item)) }
+        createLog(config).use { log -> assertTrue(log.containsItem(item.index, item.term)) }
     }
 
     @Test
@@ -163,7 +164,7 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val item = Fixtures.createLogItem()
 
-        SegmentedLog(config).use { log -> assertFalse(log.containsItem(item.index, item.term)) }
+        createLog(config).use { log -> assertFalse(log.containsItem(item.index, item.term)) }
     }
 
     @Test
@@ -172,8 +173,8 @@ internal class SegmentedLogTest {
         val anotherTerm = krandom<Term>()
         val item = Fixtures.createLogItem()
 
-        SegmentedLog(config).use { log -> log.appendItems(listOf(item)) }
-        SegmentedLog(config).use { log -> assertFalse(log.containsItem(item.index, anotherTerm)) }
+        createLog(config).use { log -> log.appendItems(listOf(item)) }
+        createLog(config).use { log -> assertFalse(log.containsItem(item.index, anotherTerm)) }
     }
 
     @Test
@@ -181,7 +182,7 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val item = Fixtures.createLogItem()
 
-        SegmentedLog(config).use { log -> assertFalse(log.isAheadOf(item.index, item.term)) }
+        createLog(config).use { log -> assertFalse(log.isAheadOf(item.index, item.term)) }
     }
 
     @Test
@@ -189,8 +190,8 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val item = Fixtures.createLogItem()
 
-        SegmentedLog(config).use { log -> log.appendItems(listOf(item)) }
-        SegmentedLog(config).use { log -> assertFalse(log.isAheadOf(item.index, item.term.incremented())) }
+        createLog(config).use { log -> log.appendItems(listOf(item)) }
+        createLog(config).use { log -> assertFalse(log.isAheadOf(item.index, item.term.incremented())) }
     }
 
     @Test
@@ -198,8 +199,8 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val item = Fixtures.createLogItem()
 
-        SegmentedLog(config).use { log -> log.appendItems(listOf(item)) }
-        SegmentedLog(config).use { log -> assertTrue(log.isAheadOf(item.index, item.term.decremented())) }
+        createLog(config).use { log -> log.appendItems(listOf(item)) }
+        createLog(config).use { log -> assertTrue(log.isAheadOf(item.index, item.term.decremented())) }
     }
 
     @Test
@@ -207,8 +208,8 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val item = Fixtures.createLogItem()
 
-        SegmentedLog(config).use { log -> log.appendItems(listOf(item)) }
-        SegmentedLog(config).use { log -> assertFalse(log.isAheadOf(item.index.incremented(), item.term)) }
+        createLog(config).use { log -> log.appendItems(listOf(item)) }
+        createLog(config).use { log -> assertFalse(log.isAheadOf(item.index.incremented(), item.term)) }
     }
 
     @Test
@@ -216,8 +217,12 @@ internal class SegmentedLogTest {
         val config = createConfig(krandom())
         val item = Fixtures.createLogItem()
 
-        SegmentedLog(config).use { log -> log.appendItems(listOf(item)) }
-        SegmentedLog(config).use { log -> assertTrue(log.isAheadOf(item.index.decremented(), item.term)) }
+        createLog(config).use { log -> log.appendItems(listOf(item)) }
+        createLog(config).use { log -> assertTrue(log.isAheadOf(item.index.decremented(), item.term)) }
+    }
+
+    private fun createLog(config: NodeConfig): SegmentedLog {
+        return SegmentedLog(config, Partition.GLOBAL)
     }
 
     private fun createConfig(nodeId: String): NodeConfig {

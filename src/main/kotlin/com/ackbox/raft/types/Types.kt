@@ -55,7 +55,7 @@ data class Partition(val value: Int) {
 
     companion object {
 
-        val GLOBAL: Partition = Partition(-1)
+        val GLOBAL: Partition = Partition(0)
     }
 }
 

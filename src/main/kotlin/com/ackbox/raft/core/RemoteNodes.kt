@@ -3,10 +3,12 @@ package com.ackbox.raft.core
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.log.ReplicatedLog
 import com.ackbox.raft.networking.NamedChannel
+import com.ackbox.raft.networking.NodeAddress
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.UnknownNodeException
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.Metadata
+import com.google.common.annotations.VisibleForTesting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -23,7 +25,7 @@ class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>) 
 
     fun activateNode(channel: NamedChannel) {
         logger.info("Creating a new remote for node [{}]", channel.id)
-        val remote = remotes.computeIfAbsent(channel.id) { RemoteNode(config, channel) }
+        val remote = remotes.computeIfAbsent(channel.id) { createRemoteNode(channel) }
         logger.info("Node [{}] is now mapped remote [{}]", channel.id, remote)
     }
 
@@ -41,6 +43,16 @@ class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>) 
         return broadcastInParallel { remote -> remote.sendVote(requestId, metadata, log) }
     }
 
+    fun sendSnapshotTo(address: NodeAddress, requestId: String, metadata: Metadata, snapshot: Snapshot) {
+        val channel = address.toChannel()
+        try {
+            val remoteNode = createRemoteNode(channel)
+            remoteNode.sendSnapshot(requestId, metadata, snapshot)
+        } finally {
+            channel.runCatching { shutdownNow() }
+        }
+    }
+
     fun resetState(nextLogIndex: Index) {
         remotes.values.forEach { remote -> remote.resetState(nextLogIndex) }
     }
@@ -53,14 +65,19 @@ class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>) 
 
     private fun <T : Any> broadcastInParallel(consumer: (RemoteNode) -> T): List<T> {
         return runBlocking(Dispatchers.IO) {
-            remotes.values.filter { it.channel.id != config.nodeId }
+            remotes.values.filter { it.remoteId != config.nodeId }
                 .map { remote -> async { consumer(remote) } }.map { it.await() }
         }
     }
 
     private fun createRemotes(channels: List<NamedChannel>): ConcurrentHashMap<String, RemoteNode> {
-        val remotes = channels.map { channel -> channel.id to RemoteNode(config, channel) }
+        val remotes = channels.map { channel -> channel.id to createRemoteNode(channel) }
         return ConcurrentHashMap(remotes.toMap())
+    }
+
+    @VisibleForTesting
+    internal fun createRemoteNode(channel: NamedChannel): RemoteNode {
+        return RemoteChannelNode(config, channel)
     }
 
     companion object {

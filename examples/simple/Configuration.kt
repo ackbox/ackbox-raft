@@ -58,7 +58,7 @@ class LoopNode(private val config: NodeConfig) {
 
     private fun createRequest(): SetEntryRequest {
         val key = UUID.randomUUID().toString()
-        val data = ByteBuffer.wrap(UUID.randomUUID().toString().toByteArray())
+        val data = UUID.randomUUID().toString().toByteArray()
         return SetEntryRequest.newBuilder()
             .setTimestamp(System.currentTimeMillis())
             .setEntry(ByteString.copyFrom(KV(key, data).toByteArray()))
