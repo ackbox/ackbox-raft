@@ -48,6 +48,17 @@ data class Term(val value: Long = UNDEFINED_ID) : Comparable<Term> {
     }
 }
 
+/**
+ * Data class representing a cluster data partition.
+ */
+data class Partition(val value: Int) {
+
+    companion object {
+
+        val GLOBAL: Partition = Partition(-1)
+    }
+}
+
 fun min(first: Index, last: Index): Index = Index(min(first.value, last.value))
 
 fun max(first: Index, last: Index): Index = Index(max(first.value, last.value))

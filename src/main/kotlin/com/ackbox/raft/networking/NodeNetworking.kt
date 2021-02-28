@@ -19,7 +19,7 @@ typealias NetworkingChangedCallback = (NamedChannel) -> Unit
 @ThreadSafe
 class NodeNetworking(private val config: NodeConfig) : StateMachine {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, NodeNetworking::class)
+    private val logger: NodeLogger = NodeLogger.forNode(config.nodeId, NodeNetworking::class)
     private val channels: ConcurrentHashMap<String, NamedChannel> = createChannels()
 
     private var server: Server? = null

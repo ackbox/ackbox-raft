@@ -2,6 +2,7 @@ package com.ackbox.raft.api
 
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Partition
 import com.ackbox.raft.types.Term
 import kotlinx.coroutines.flow.Flow
 import java.nio.ByteBuffer
@@ -19,6 +20,7 @@ interface ReplicaNode {
     object Append {
         data class Input(
             val requestId: String,
+            val leaderPartition: Partition,
             val leaderId: String,
             val leaderTerm: Term,
             val previousLogIndex: Index,
@@ -38,6 +40,7 @@ interface ReplicaNode {
     object Vote {
         data class Input(
             val requestId: String,
+            val candidatePartition: Partition,
             val candidateId: String,
             val candidateTerm: Term,
             val lastLogIndex: Index,
@@ -55,6 +58,7 @@ interface ReplicaNode {
     object Snapshot {
         data class Input(
             val requestId: String,
+            val leaderPartition: Partition,
             val leaderId: String,
             val leaderTerm: Term,
             val lastIncludedLogIndex: Index,

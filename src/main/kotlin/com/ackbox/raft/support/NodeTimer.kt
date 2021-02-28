@@ -1,14 +1,15 @@
 package com.ackbox.raft.support
 
 import com.ackbox.raft.config.NodeConfig
+import com.ackbox.raft.types.Partition
 import java.util.Timer
 import kotlin.concurrent.scheduleAtFixedRate
 
 typealias Callback = () -> Unit
 
-class NodeTimer(private val config: NodeConfig) {
+class NodeTimer(private val config: NodeConfig, partition: Partition) {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, NodeTimer::class)
+    private val logger: NodeLogger = NodeLogger.forPartition(config.nodeId, partition, NodeTimer::class)
     private var electionTimer: Timer = createElectionTimer()
     private var heartbeatTimer: Timer = createHeartbeatTimer()
     private var snapshotTimer: Timer = createSnapshotTimer()

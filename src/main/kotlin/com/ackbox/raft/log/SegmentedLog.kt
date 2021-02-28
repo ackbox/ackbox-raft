@@ -4,6 +4,7 @@ import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Partition
 import com.google.common.annotations.VisibleForTesting
 import java.nio.file.Files
 import java.nio.file.Path
@@ -16,26 +17,26 @@ import kotlin.streams.asSequence
  * The current implementation ensures that log items are stored in persisted storage (file system).
  */
 @NotThreadSafe
-class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
+class SegmentedLog(private val config: NodeConfig, private val partition: Partition) : ReplicatedLog {
 
     private val segments: TreeMap<Index, Segment> = TreeMap<Index, Segment>()
 
-    override val logger: NodeLogger = NodeLogger.from(config.nodeId, SegmentedLog::class)
+    override val logger: NodeLogger = NodeLogger.forPartition(config.nodeId, partition, SegmentedLog::class)
 
     override fun open() {
-        logger.info("Opening segments from [{}]", config.logPath)
-        Files.createDirectories(config.logPath)
-        Files.walk(config.logPath).asSequence()
+        logger.info("Opening segments from [{}]", config.getLogPath(partition))
+        Files.createDirectories(config.getLogPath(partition))
+        Files.walk(config.getLogPath(partition)).asSequence()
             .filter<Path>(Files::isRegularFile)
             .map { path -> Segment.getFirstIndexFromFilename(path.fileName.toString()) }
-            .map { index -> Segment(Index(index), config.logPath, config.maxLogSegmentSizeInBytes) }
+            .map { index -> Segment(Index(index), config.getLogPath(partition), config.maxLogSegmentSizeInBytes) }
             .onEach { segment -> segment.load() }
             .forEach { segment -> segments[segment.firstItemIndex] = segment }
         segments.lastEntry()?.value?.open()
     }
 
     override fun close() {
-        logger.info("Closing segments from [{}]", config.logPath)
+        logger.info("Closing segments from [{}]", config.getLogPath(partition))
         segments.values.forEach { segment -> segment.safelyClose() }
     }
 
@@ -126,7 +127,7 @@ class SegmentedLog(private val config: NodeConfig) : ReplicatedLog {
             // the current segment is closed and a new one is created.
             logger.info("Creating a new segment for index [{}]", item.index)
             lastSegment?.safelyClose()
-            val logPath = config.logPath
+            val logPath = config.getLogPath(partition)
             val maxSizeInBytes = config.maxLogSegmentSizeInBytes
             segments[item.index] = Segment(item.index, logPath, maxSizeInBytes)
         }

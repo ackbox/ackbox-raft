@@ -2,15 +2,16 @@ package com.ackbox.raft.core
 
 import com.ackbox.raft.api.LeaderNode
 import com.ackbox.raft.api.LeaderNode.AddNode
-import com.ackbox.raft.api.LeaderNode.GetItem
+import com.ackbox.raft.api.LeaderNode.GetEntry
 import com.ackbox.raft.api.LeaderNode.RemoveNode
-import com.ackbox.raft.api.LeaderNode.SetItem
+import com.ackbox.raft.api.LeaderNode.SetEntry
 import com.ackbox.raft.api.ReplicaNode
 import com.ackbox.raft.api.ReplicaNode.Append
 import com.ackbox.raft.api.ReplicaNode.Vote
 import com.ackbox.raft.config.NodeConfig
 import com.ackbox.raft.networking.NodeNetworking
 import com.ackbox.raft.networking.NodeNetworkingChange
+import com.ackbox.raft.store.KV
 import com.ackbox.raft.support.Callback
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.NodeLogger
@@ -39,46 +40,56 @@ class LocalNode(
     private val remotes: RemoteNodes
 ) : LeaderNode, ReplicaNode {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, LocalNode::class)
+    private val logger: NodeLogger = NodeLogger.forNode(config.nodeId, LocalNode::class)
 
     override val nodeId: String = config.nodeId
 
     fun start() {
-        val electionCallback = createElectionCallback()
-        val heartbeatCallback = createHeartbeatCallback()
-        val snapshotCallback = createSnapshotCallback()
         val operationId = UUID.randomUUID().toString()
-        locked.withLock(START_NODE_OPERATION, operationId) { state ->
-            state.start(electionCallback, heartbeatCallback, snapshotCallback)
+        config.partitions.forEach { partition ->
+            val electionCallback = createElectionCallback(partition)
+            val heartbeatCallback = createHeartbeatCallback(partition)
+            val snapshotCallback = createSnapshotCallback(partition)
+            locked.withLock(partition, START_NODE_OPERATION, operationId) { state ->
+                state.start(electionCallback, heartbeatCallback, snapshotCallback)
+            }
         }
     }
 
     fun stop() {
         val operationId = UUID.randomUUID().toString()
-        locked.withLock(STOP_NODE_OPERATION, operationId) { state -> state.stop() }
+        config.partitions.forEach { partition ->
+            locked.withLock(partition, STOP_NODE_OPERATION, operationId) { state -> state.stop() }
+        }
     }
 
     fun describeState() {
         val operationId = UUID.randomUUID().toString()
-        locked.withLock(DESCRIBE_STATE_OPERATION, operationId) { state -> state.log.describe() }
+        config.partitions.forEach { partition ->
+            locked.withLock(partition, DESCRIBE_STATE_OPERATION, operationId) { state -> state.log.describe() }
+        }
     }
 
-    override fun setItem(input: SetItem.Input): SetItem.Output {
+    override fun setEntry(input: SetEntry.Input): SetEntry.Output {
         val operationId = UUID.randomUUID().toString()
-        return locked.withLock(REQUEST_APPEND_OPERATION, operationId) { state ->
+        val entry = KV.fromByteArray(input.entry.array())
+        val partition = Partition(entry.key.hashCode() % config.partitionCount)
+        return locked.withLock(partition, REQUEST_APPEND_OPERATION, operationId) { state ->
             // Apply entries the replicated to the leader's log before doing anything.
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
-            val items = convertToLogItems(input.type, lastItemIndex, leaderTerm, input.data)
+            val data = listOf(entry.value.array())
+            val items = convertToLogItems(Type.STORE_CHANGE, lastItemIndex, leaderTerm, data)
             appendItem(operationId, state, items)
-            return@withLock SetItem.Output(consensusMetadata.leaderId)
+            return@withLock SetEntry.Output(consensusMetadata.leaderId)
         }
     }
 
-    override fun getItem(input: GetItem.Input): GetItem.Output {
+    override fun getEntry(input: GetEntry.Input): GetEntry.Output {
         val operationId = UUID.randomUUID().toString()
-        return locked.withLock(REQUEST_RETRIEVE_OPERATION, operationId) { state ->
+        val partition = Partition(input.key.hashCode() % config.partitionCount)
+        return locked.withLock(partition, REQUEST_RETRIEVE_OPERATION, operationId) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
             // the leader for the current term.
             val consensusMetadata = state.metadata.consensusMetadata
@@ -88,12 +99,13 @@ class LocalNode(
             }
 
             // Retrieve committed entry from key-value store.
-            GetItem.Output(leaderId, state.getStoreValue(input.key))
+            GetEntry.Output(leaderId, state.getStoreValue(input.key))
         }
     }
 
     override fun addNode(input: AddNode.Input): AddNode.Output {
-        val snapshot = locked.withLock(REQUEST_ADD_NODE_OPERATION, input.requestId) { state ->
+        val partition = Partition.GLOBAL
+        val snapshot = locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, input.requestId) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
             // the leader for the current term.
             val consensusMetadata = state.metadata.consensusMetadata
@@ -106,7 +118,8 @@ class LocalNode(
         // Try to activate the new node by sending the latest snapshot. In this process, we create a temporary remote
         // facade in order to send the latest leader's snapshot. If it's successful, the leader will commit a log item
         // that will cause the new remote to be added to the leader's networking setup.
-        val metadata = locked.withLock(REQUEST_ADD_NODE_OPERATION, input.requestId) { state -> state.metadata }
+        val metadata =
+            locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, input.requestId) { state -> state.metadata }
         val channel = input.address.toChannel()
         try {
             val remoteNode = RemoteNode(config, channel)
@@ -116,7 +129,7 @@ class LocalNode(
         }
 
         // Replicate the configuration change.
-        return locked.withLock(REQUEST_ADD_NODE_OPERATION, input.requestId) { state ->
+        return locked.withLock(partition, REQUEST_ADD_NODE_OPERATION, input.requestId) { state ->
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
@@ -130,7 +143,7 @@ class LocalNode(
 
     override fun removeNode(input: RemoveNode.Input): RemoveNode.Output {
         // Replicate the configuration change.
-        return locked.withLock(REQUEST_REMOVE_NODE_OPERATION, input.requestId) { state ->
+        return locked.withLock(Partition.GLOBAL, REQUEST_REMOVE_NODE_OPERATION, input.requestId) { state ->
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
@@ -148,7 +161,9 @@ class LocalNode(
 
         // Lock the state in order to avoid inconsistencies while checks and validations are being performed for the
         // append request.
-        return locked.withLock(HANDLE_APPEND_OPERATION, input.requestId) { state ->
+        val partition = input.leaderPartition
+        val operationId = input.requestId
+        return locked.withLock(partition, HANDLE_APPEND_OPERATION, operationId) { state ->
             // Check whether there are multiple leaders sending append requests. If multiple leaders are detected, force
             // them to step down and restart an election by incrementing the term.
             val leaderId = input.leaderId
@@ -199,7 +214,9 @@ class LocalNode(
 
         // Lock the state in order to avoid inconsistencies while checks and validations are being performed for the
         // vote request.
-        return locked.withLock(HANDLE_VOTE_OPERATION, input.requestId) { state ->
+        val partition = input.candidatePartition
+        val operationId = input.requestId
+        return locked.withLock(partition, HANDLE_VOTE_OPERATION, operationId) { state ->
             // We ensure a valid candidate by checking the following cases:
             //   1. Check whether the candidate node has a term greater than the term known by this node.
             //   2. Check whether the node can vote for the candidate.
@@ -231,7 +248,7 @@ class LocalNode(
                 // We ensure the request is being issued by the node we consider the leader.
                 val leaderId = input.leaderId
                 val leaderTerm = input.leaderTerm
-                locked.withLock(HANDLE_SNAPSHOT_OPERATION, input.requestId) { state ->
+                locked.withLock(input.leaderPartition, HANDLE_SNAPSHOT_OPERATION, input.requestId) { state ->
                     state.ensureValidLeader(leaderId, leaderTerm)
                 }
             }
@@ -247,7 +264,9 @@ class LocalNode(
             // A snapshot request is sent by the leader when it detects the replica is behind the acceptable threshold.
             // If the state drift between the leader and the replica is small, the period heartbeat between the leader
             // and the replica is sufficient for the replica to reconstruct its state.
-            return@use locked.withLock(HANDLE_SNAPSHOT_OPERATION, lastInput!!.requestId) { state ->
+            val partition = lastInput!!.leaderPartition
+            val operationId = lastInput!!.requestId
+            return@use locked.withLock(partition, HANDLE_SNAPSHOT_OPERATION, operationId) { state ->
                 val leaderId = lastInput!!.leaderId
                 val leaderTerm = lastInput!!.leaderTerm
 
@@ -270,7 +289,7 @@ class LocalNode(
         }
     }
 
-    private fun appendItem(operationId: String, state: UnsafeLocalNodeState, items: List<LogItem> = emptyList()) {
+    private fun appendItem(operationId: String, state: PartitionState, items: List<LogItem> = emptyList()) {
         // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
         // the leader for the current term.
         val consensusMetadata = state.metadata.consensusMetadata
@@ -317,13 +336,13 @@ class LocalNode(
         state.commitLogItems(commitIndex)
     }
 
-    private fun createElectionCallback(): Callback {
+    private fun createElectionCallback(partition: Partition): Callback {
         return {
             val operationId = UUID.randomUUID().toString()
             logger.info("Starting a new election")
             // Collect votes from remotes in the cluster. If we detect a violation of the term invariant, we stop the
             // process and transition the current node to follower mode.
-            val votes = locked.withLock(REQUEST_VOTE_OPERATION, operationId) { state ->
+            val votes = locked.withLock(partition, REQUEST_VOTE_OPERATION, operationId) { state ->
                 state.transitionToCandidate()
                 try {
                     remotes.requestVote(operationId, state.metadata, state.log)
@@ -338,7 +357,7 @@ class LocalNode(
             }
             // Check whether candidate node won the election. Here we add '1' to total to take into account the vote of
             // the current node, which of course is voting for itself.
-            locked.withLock(REQUEST_VOTE_OPERATION, operationId) { state ->
+            locked.withLock(partition, REQUEST_VOTE_OPERATION, operationId) { state ->
                 val total = 1 + votes.map { if (it) 1 else 0 }.sum()
                 if (total > remotes.remotesCount / 2) {
                     logger.info("Node has been elected as leader")
@@ -353,12 +372,12 @@ class LocalNode(
         }
     }
 
-    private fun createHeartbeatCallback(): Callback {
+    private fun createHeartbeatCallback(partition: Partition): Callback {
         return {
             try {
                 val operationId = UUID.randomUUID().toString()
                 logger.info("Started heartbeat with followers")
-                locked.withLock(HEARTBEAT_OPERATION, operationId) { state -> appendItem(operationId, state) }
+                locked.withLock(partition, HEARTBEAT_OPERATION, operationId) { state -> appendItem(operationId, state) }
                 logger.debug("Finished heartbeat with followers")
             } catch (e: Exception) {
                 logger.error("Error while executing heartbeat", e)
@@ -366,12 +385,12 @@ class LocalNode(
         }
     }
 
-    private fun createSnapshotCallback(): Callback {
+    private fun createSnapshotCallback(partition: Partition): Callback {
         return {
             try {
                 val operationId = UUID.randomUUID().toString()
                 logger.info("Taking a new snapshot of node's state")
-                val snapshot = locked.withLock(REQUEST_SNAPSHOT_OPERATION, operationId) { state ->
+                val snapshot = locked.withLock(partition, REQUEST_SNAPSHOT_OPERATION, operationId) { state ->
                     state.takeSnapshot()
                     state.getLatestSnapshot()
                 }

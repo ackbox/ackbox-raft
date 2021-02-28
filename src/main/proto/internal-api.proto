@@ -27,17 +27,20 @@ message VoteRequest {
   // Request unique identifier.
   string requestId = 2;
 
+  // Candidate's partition.
+  int32 candidatePartition = 3;
+
   // Candidate's term.
-  int64 candidateTerm = 3;
+  int64 candidateTerm = 4;
 
   // Candidate's unique identifier.
-  string candidateId = 4;
+  string candidateId = 5;
 
   // Index of candidate's last log entry.
-  int64 lastLogIndex = 5;
+  int64 lastLogIndex = 6;
 
   // Term of candidate's last log entry.
-  int64 lastLogTerm = 6;
+  int64 lastLogTerm = 7;
 }
 
 // The vote response message.
@@ -86,30 +89,33 @@ message AppendRequest {
   // Request unique identifier.
   string requestId = 2;
 
+  // Leader's partition.
+  int32 leaderPartition = 3;
+
   // Leader's term.
-  int64 leaderTerm = 3;
+  int64 leaderTerm = 4;
 
   // Leader's unique identifier so follower can redirect clients.
-  string leaderId = 4;
+  string leaderId = 5;
 
   // Leader's commit index.
-  int64 leaderCommitIndex = 5;
+  int64 leaderCommitIndex = 6;
 
   // Index of log entry immediately preceding new ones.
-  int64 previousLogIndex = 6;
+  int64 previousLogIndex = 7;
 
   // Term of previous log index entry.
-  int64 previousLogTerm = 7;
+  int64 previousLogTerm = 8;
 
   // Log entries to store (empty for heartbeat; may send more than one for efficiency).
-  repeated Entry entries = 8;
+  repeated Entry entries = 9;
 }
 
 // The append entry response message.
 message AppendReply {
   // Possible status for an append request.
   // - SUCCESS: if follower was able to successfully append the log entries.
-  // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster.
+  // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster for the partition.
   // - TERM_MISMATCH: if follower's term does not agree with issuer of the request.
   // - NODE_NOT_KNOWN: if follower received a request from a node that is not known.
   // - PROCESSING: if follower is busy processing previous requests.
@@ -144,27 +150,30 @@ message SnapshotRequest {
   // Request unique identifier.
   string requestId = 2;
 
+  // Leader's partition.
+  int32 leaderPartition = 3;
+
   // Leader's term.
-  int64 leaderTerm = 3;
+  int64 leaderTerm = 4;
 
   // Leader's unique identifier so follower can redirect clients.
-  string leaderId = 4;
+  string leaderId = 5;
 
   // The snapshot replaces all entries up through and including this index.
-  int64 lastIncludedLogIndex = 5;
+  int64 lastIncludedLogIndex = 6;
 
   // The term of last included index.
-  int64 lastIncludedLogTerm = 6;
+  int64 lastIncludedLogTerm = 7;
 
   // Snapshot data to be installed.
-  bytes data = 7;
+  bytes data = 8;
 }
 
 // Install snapshot response message.
 message SnapshotReply {
   // Possible status for a install snapshot request.
   // - SUCCESS: follower was able to install the snapshot successfully.
-  // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster.
+  // - LEADER_MISMATCH: if follower detects that there are multiple leaders in the cluster for the partition.
   // - TERM_MISMATCH: if follower's term does not agree with issuer of the request.
   // - NODE_NOT_KNOWN: if follower received a request from a node that is not known.
   // - PROCESSING: if follower is busy processing previous requests.

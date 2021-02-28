@@ -11,7 +11,7 @@ import java.time.Duration
 
 class Raft(config: NodeConfig, private val networking: NodeNetworking, private val node: LocalNode) {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, Raft::class)
+    private val logger: NodeLogger = NodeLogger.forNode(config.nodeId, Raft::class)
     private val externalApi = ExternalNodeApi(node, config.clock)
     private val internalApi = InternalNodeApi(node, config.clock)
     private val managementApi = ManagementNodeApi(node, config.clock)

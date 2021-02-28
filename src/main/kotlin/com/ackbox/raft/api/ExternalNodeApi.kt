@@ -1,13 +1,12 @@
 package com.ackbox.raft.api
 
 import com.ackbox.raft.api.ExternalNodeGrpcKt.ExternalNodeCoroutineImplBase
-import com.ackbox.raft.api.LeaderNode.GetItem
-import com.ackbox.raft.api.LeaderNode.SetItem
+import com.ackbox.raft.api.LeaderNode.GetEntry
+import com.ackbox.raft.api.LeaderNode.SetEntry
 import com.ackbox.raft.support.CommitIndexMismatchException
 import com.ackbox.raft.support.LockNotAcquiredException
 import com.ackbox.raft.support.NodeLogger
 import com.ackbox.raft.support.NotLeaderException
-import com.ackbox.raft.types.LogItem
 import com.google.protobuf.ByteString
 import java.nio.ByteBuffer
 import java.time.Clock
@@ -19,13 +18,13 @@ import java.time.Clock
  */
 class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : ExternalNodeCoroutineImplBase() {
 
-    private val logger: NodeLogger = NodeLogger.from(node.nodeId, ExternalNodeApi::class)
+    private val logger: NodeLogger = NodeLogger.forNode(node.nodeId, ExternalNodeApi::class)
 
     override suspend fun setEntry(request: SetEntryRequest): SetEntryReply {
         logger.debug("Received set entry request [{}]", request)
         return try {
-            val input = SetItem.Input(LogItem.Type.STORE_CHANGE, listOf(request.entry.toByteArray()))
-            val output = node.setItem(input)
+            val input = SetEntry.Input(ByteBuffer.wrap(request.entry.toByteArray()))
+            val output = node.setEntry(input)
             createSuccessSetEntryReply(output.leaderId)
         } catch (e: NotLeaderException) {
             logger.warn("Received set entry request while not leader=[{}]", e.knownLeaderId, e)
@@ -45,9 +44,9 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
     override suspend fun getEntry(request: GetEntryRequest): GetEntryReply {
         logger.debug("Received get entry request [{}]", request)
         return try {
-            val input = GetItem.Input(request.key)
-            val output = node.getItem(input)
-            createSuccessGetEntryReply(output.leaderId, output.data)
+            val input = GetEntry.Input(request.key)
+            val output = node.getEntry(input)
+            createSuccessGetEntryReply(output.leaderId, output.entry)
         } catch (e: NotLeaderException) {
             logger.warn("Received get entry request while not leader=[{}]", e.knownLeaderId, e)
             createFailureGetEntryReply(e.knownLeaderId, GetEntryReply.Status.NOT_LEADER)

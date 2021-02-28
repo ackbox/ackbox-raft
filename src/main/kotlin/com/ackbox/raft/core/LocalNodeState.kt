@@ -16,6 +16,7 @@ import com.ackbox.raft.support.VoteNotGrantedException
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
 import com.ackbox.raft.types.Metadata
+import com.ackbox.raft.types.Partition
 import com.ackbox.raft.types.Term
 import com.ackbox.raft.types.max
 import com.ackbox.raft.types.min
@@ -23,62 +24,93 @@ import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.NotThreadSafe
 import javax.annotation.concurrent.ThreadSafe
 
 /**
- * State for the current local node. This class encapsulates an instance of [UnsafeLocalNodeState]. It only allows
- * external object to modify [UnsafeLocalNodeState] under a lock to prevent issues due to concurrent mutations.
+ * State for the current local node. This class encapsulates an instance of [PartitionState]. It only allows
+ * external object to modify [PartitionState] under a lock to prevent issues due to concurrent mutations.
  */
 @ThreadSafe
-class LocalNodeState(private val config: NodeConfig, private val unsafeState: UnsafeLocalNodeState) {
+class LocalNodeState(private val factory: PartitionStateFactory) {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, LocalNodeState::class)
+    private val states: MutableMap<Partition, LockedPartitionState> = ConcurrentHashMap<Partition, LockedPartitionState>()
+
+    fun <T : Any> withLock(
+        partition: Partition,
+        operationName: String,
+        operationId: String,
+        function: (PartitionState) -> T
+    ): T {
+        states.computeIfAbsent(partition) { factory.create(partition) }
+        return states.getValue(partition).withLock(operationName, operationId, function)
+    }
+
+    companion object {
+
+        fun fromConfig(config: NodeConfig, networking: NodeNetworking): LocalNodeState {
+            return LocalNodeState(PartitionStateFactory(config, networking))
+        }
+    }
+}
+
+@ThreadSafe
+class PartitionStateFactory(private val config: NodeConfig, private val networking: NodeNetworking) {
+
+    fun create(partition: Partition): LockedPartitionState {
+        val store = KeyValueStore.fromConfig(config)
+        val metadata = Metadata(config.nodeId, partition)
+        val log = SegmentedLog(config, partition)
+        val state = PartitionState(config, networking, store, metadata, log)
+        return LockedPartitionState(config, partition, state)
+    }
+}
+
+@ThreadSafe
+class LockedPartitionState(
+    private val config: NodeConfig,
+    private val partition: Partition,
+    private val unsafeState: PartitionState
+) {
+
+    private val logger: NodeLogger = NodeLogger.forNode(config.nodeId, LocalNodeState::class)
     private val lock: ReentrantLock = ReentrantLock()
 
-    fun <T : Any> withLock(operationName: String, operationId: String, function: (UnsafeLocalNodeState) -> T): T {
+    fun <T : Any> withLock(operationName: String, operationId: String, function: (PartitionState) -> T): T {
         return try {
             // In order to avoid deadlocks, we fail fast if we are unable to acquire the lock to safely modify the
             // node's state. Requests are supposed to be retried once they fail with this exception.
             if (!lock.tryLock(config.maxStateLockWaitTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 throw LockNotAcquiredException()
             }
-            logger.info("Locked for operation [{}::{}]", operationName, operationId)
+            logger.info("Locked for operation [{}::{}::{}]", partition, operationName, operationId)
             val result = function(unsafeState)
             result
         } finally {
-            logger.info("Unlocked for operation [{}::{}]", operationName, operationId)
+            logger.info("Unlocked for operation [{}::{}::{}]", partition, operationName, operationId)
             if (lock.isHeldByCurrentThread) {
                 lock.unlock()
             }
         }
     }
-
-    companion object {
-
-        fun fromConfig(config: NodeConfig, networking: NodeNetworking): LocalNodeState {
-            val store = KeyValueStore.fromConfig(config)
-            val unsafeState = UnsafeLocalNodeState(config, networking, store)
-            return LocalNodeState(config, unsafeState)
-        }
-    }
 }
 
 @NotThreadSafe
-class UnsafeLocalNodeState(
+class PartitionState(
     private val config: NodeConfig,
     private val networking: NodeNetworking,
     private val store: KeyValueStore,
-    val metadata: Metadata = Metadata(config.nodeId),
-    val log: ReplicatedLog = SegmentedLog(config)
+    val metadata: Metadata,
+    val log: ReplicatedLog
 ) {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, UnsafeLocalNodeState::class)
-    private val timer: NodeTimer = NodeTimer(config)
+    private val logger: NodeLogger = NodeLogger.forPartition(metadata.nodeId, metadata.partition, PartitionState::class)
+    private val timer: NodeTimer = NodeTimer(config, metadata.partition)
 
-    private var snapshot: Snapshot = Snapshot.load(config.snapshotPath)
+    private var snapshot: Snapshot = Snapshot.load(config.getSnapshotPath(metadata.partition))
     private var electionCallback: Callback? = null
     private var heartbeatCallback: Callback? = null
 
@@ -195,7 +227,7 @@ class UnsafeLocalNodeState(
         // If no item is found, we replace the state machine's state with the snapshot provided as well as reset the
         // logs so that the leader can properly replicate its own.
         logger.info("Loading snapshot from [{}]", sourceDataPath)
-        snapshot = Snapshot.fromCompressedData(sourceDataPath, config.snapshotPath)
+        snapshot = Snapshot.fromCompressedData(sourceDataPath, config.getSnapshotPath(metadata.partition))
         logger.info("Restoring snapshot [{}]", snapshot)
 
         store.restoreSnapshot(snapshot.dataPath)
@@ -224,7 +256,7 @@ class UnsafeLocalNodeState(
                 lastIncludedLogIndex,
                 lastIncludedLogTerm,
                 snapshotPath,
-                config.snapshotPath,
+                config.getSnapshotPath(metadata.partition),
             )
         } finally {
             snapshotPath.runCatching { toFile().deleteRecursively() }
@@ -232,7 +264,7 @@ class UnsafeLocalNodeState(
     }
 
     fun getLatestSnapshot(): Snapshot {
-        return Snapshot.load(config.snapshotPath)
+        return Snapshot.load(config.getSnapshotPath(metadata.partition),)
     }
 
     fun updateVote(candidateId: String) {

@@ -16,7 +16,7 @@ import javax.annotation.concurrent.ThreadSafe
 @ThreadSafe
 class RemoteNodes(private val config: NodeConfig, channels: List<NamedChannel>) {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, RemoteNodes::class)
+    private val logger: NodeLogger = NodeLogger.forNode(config.nodeId, RemoteNodes::class)
     private val remotes: ConcurrentHashMap<String, RemoteNode> = createRemotes(channels)
 
     val remotesCount: Int get() = remotes.size

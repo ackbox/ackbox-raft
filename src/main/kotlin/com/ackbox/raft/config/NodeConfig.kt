@@ -1,15 +1,17 @@
 package com.ackbox.raft.config
 
+import com.ackbox.raft.networking.NodeAddress
 import com.ackbox.raft.types.DATA_BASE_FOLDER
 import com.ackbox.raft.types.HEARTBEAT_DELAY_RATIO
 import com.ackbox.raft.types.LOG_SEGMENT_SIZE_IN_BYTES
 import com.ackbox.raft.types.MAX_ELECTION_TIMER_MS
 import com.ackbox.raft.types.MIN_ELECTION_TIMER_MS
+import com.ackbox.raft.types.PARTITION_COUNT
+import com.ackbox.raft.types.Partition
 import com.ackbox.raft.types.REMOTE_TIMEOUT
 import com.ackbox.raft.types.Randoms
 import com.ackbox.raft.types.SNAPSHOT_DELAY
 import com.ackbox.raft.types.STATE_LOCK_WAIT_TIMEOUT
-import com.ackbox.raft.networking.NodeAddress
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Clock
@@ -34,6 +36,12 @@ data class NodeConfig(
      * It defaults to [Clock.systemUTC()].
      */
     val clock: Clock = Clock.systemUTC(),
+
+    /**
+     * The data in the cluster is split up across partition in order to improve throughput.
+     * * It defaults to [PARTITION_COUNT].
+     */
+    val partitionCount: Int = PARTITION_COUNT,
 
     /**
      * By default, the node's log is divided by segments. The size of these segments is configurable.
@@ -88,14 +96,9 @@ data class NodeConfig(
     val nodeId: String = local.nodeId
 
     /**
-     * Return log path for this node on the file system.
+     * Returns all enabled partitions in the cluster.
      */
-    val logPath: Path get() = Paths.get(dataBaseFolder, nodeId, "log")
-
-    /**
-     * Return snapshot path for this node on the file system.
-     */
-    val snapshotPath: Path get() = Paths.get(dataBaseFolder, nodeId, "snapshot")
+    val partitions = (1..partitionCount).asSequence().map { Partition(it) }
 
     /**
      * Return maximum wait time for responses from remote nodes when performing RPC requests.
@@ -113,6 +116,22 @@ data class NodeConfig(
      */
     val heartbeatDelay: Duration
         get() = Duration.ofMillis(electionDelayRangeMs.first / heartbeatDelayRatio)
+
+    /**
+     * Return log path for this node on the file system.
+     */
+    fun getLogPath(partition: Partition): Path {
+        return Paths.get(dataBaseFolder, nodeId, partitionId(partition), "log")
+    }
+
+    /**
+     * Return snapshot path for this node on the file system.
+     */
+    fun getSnapshotPath(partition: Partition): Path {
+        return Paths.get(dataBaseFolder, nodeId, partitionId(partition), "snapshot")
+    }
+
+    private fun partitionId(partition: Partition): String = "partition-${partition.value}"
 
     companion object {
 

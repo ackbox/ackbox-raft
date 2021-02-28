@@ -1,15 +1,15 @@
 package com.ackbox.raft.types
 
-import com.ackbox.raft.networking.NodeNetworking
 import com.ackbox.raft.support.NodeLogger
 import javax.annotation.concurrent.NotThreadSafe
 
 /**
  * Class defining basic metadata of the algorithm.
  * @param nodeId Unique identifier for the current node.
+ * @param partition State partition that this metadata instance belongs to.
  */
 @NotThreadSafe
-class Metadata(val nodeId: String) {
+class Metadata(val nodeId: String, val partition: Partition) {
 
     var consensusMetadata: ConsensusMetadata = ConsensusMetadata()
         private set
@@ -17,7 +17,7 @@ class Metadata(val nodeId: String) {
     var commitMetadata: CommitMetadata = CommitMetadata()
         private set
 
-    private val logger = NodeLogger.from(nodeId, Metadata::class)
+    private val logger = NodeLogger.forPartition(nodeId, partition, Metadata::class)
 
     fun canAcceptLeader(candidateId: String): Boolean {
         return consensusMetadata.votedFor == null || consensusMetadata.votedFor == candidateId

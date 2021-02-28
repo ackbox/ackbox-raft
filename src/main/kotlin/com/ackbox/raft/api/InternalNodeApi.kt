@@ -11,6 +11,7 @@ import com.ackbox.raft.support.UnknownNodeException
 import com.ackbox.raft.support.VoteNotGrantedException
 import com.ackbox.raft.types.Index
 import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.types.Partition
 import com.ackbox.raft.types.Term
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) : InternalNodeCoroutineImplBase() {
 
-    private val logger: NodeLogger = NodeLogger.from(node.nodeId, InternalNodeApi::class)
+    private val logger: NodeLogger = NodeLogger.forNode(node.nodeId, InternalNodeApi::class)
     private val processingSnapshot: AtomicBoolean = AtomicBoolean(false)
 
     override suspend fun handleAppend(request: AppendRequest): AppendReply {
@@ -33,6 +34,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         return try {
             val input = ReplicaNode.Append.Input(
                 request.requestId,
+                Partition(request.leaderPartition),
                 request.leaderId,
                 Term(request.leaderTerm),
                 Index(request.previousLogIndex),
@@ -70,6 +72,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
         return try {
             val input = ReplicaNode.Vote.Input(
                 request.requestId,
+                Partition(request.candidatePartition),
                 request.candidateId,
                 Term(request.candidateTerm),
                 Index(request.lastLogIndex),
@@ -107,6 +110,7 @@ class InternalNodeApi(private val node: ReplicaNode, private val clock: Clock) :
                 emit(
                     ReplicaNode.Snapshot.Input(
                         request.requestId,
+                        Partition(request.leaderPartition),
                         request.leaderId,
                         Term(request.leaderTerm),
                         Index(request.lastIncludedLogIndex),

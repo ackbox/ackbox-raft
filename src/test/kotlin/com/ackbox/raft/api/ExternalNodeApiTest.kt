@@ -24,9 +24,9 @@ internal class ExternalNodeApiTest {
     @Test
     fun `should success set request`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
-        val output = LeaderNode.SetItem.Output(LEADER_ID)
+        val output = LeaderNode.SetEntry.Output(LEADER_ID)
 
-        whenever(node.setItem(any())).thenReturn(output)
+        whenever(node.setEntry(any())).thenReturn(output)
 
         val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
@@ -38,7 +38,7 @@ internal class ExternalNodeApiTest {
     fun `should fail set request in case of NotLeaderException`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
 
-        whenever(node.setItem(any())).thenThrow(NotLeaderException(LEADER_ID))
+        whenever(node.setEntry(any())).thenThrow(NotLeaderException(LEADER_ID))
 
         val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
@@ -50,7 +50,7 @@ internal class ExternalNodeApiTest {
     fun `should fail set request in case of CommitIndexMismatchException`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
 
-        whenever(node.setItem(any())).thenThrow(CommitIndexMismatchException(LEADER_ID, COMMIT_INDEX, COMMIT_INDEX))
+        whenever(node.setEntry(any())).thenThrow(CommitIndexMismatchException(LEADER_ID, COMMIT_INDEX, COMMIT_INDEX))
 
         val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
@@ -62,7 +62,7 @@ internal class ExternalNodeApiTest {
     fun `should fail set request in case of LockNotAcquiredException`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
 
-        whenever(node.setItem(any())).thenThrow(LockNotAcquiredException())
+        whenever(node.setEntry(any())).thenThrow(LockNotAcquiredException())
 
         val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
@@ -74,7 +74,7 @@ internal class ExternalNodeApiTest {
     fun `should fail set request in case of Exception`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
 
-        whenever(node.setItem(any())).thenThrow(RuntimeException())
+        whenever(node.setEntry(any())).thenThrow(RuntimeException())
 
         val reply = runBlocking { api.setEntry(SetEntryRequest.getDefaultInstance()) }
 
@@ -85,14 +85,14 @@ internal class ExternalNodeApiTest {
     @Test
     fun `should success get request`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
-        val output = LeaderNode.GetItem.Output(LEADER_ID, DATA)
+        val output = LeaderNode.GetEntry.Output(LEADER_ID, DATA)
 
-        whenever(node.getItem(any())).thenReturn(output)
+        whenever(node.getEntry(any())).thenReturn(output)
 
         val reply = runBlocking { api.getEntry(GetEntryRequest.getDefaultInstance()) }
 
         assertEquals(output.leaderId, reply.leaderId)
-        assertArrayEquals(output.data?.array(), reply.entry.toByteArray())
+        assertArrayEquals(output.entry?.array(), reply.entry.toByteArray())
         assertEquals(GetEntryReply.Status.SUCCESS, reply.status)
     }
 
@@ -100,7 +100,7 @@ internal class ExternalNodeApiTest {
     fun `should fail get request in case of NotLeaderException`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
 
-        whenever(node.getItem(any())).thenThrow(NotLeaderException(LEADER_ID))
+        whenever(node.getEntry(any())).thenThrow(NotLeaderException(LEADER_ID))
 
         val reply = runBlocking { api.getEntry(GetEntryRequest.getDefaultInstance()) }
 
@@ -113,7 +113,7 @@ internal class ExternalNodeApiTest {
     fun `should fail get request in case of LockNotAcquiredException`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
 
-        whenever(node.getItem(any())).thenThrow(LockNotAcquiredException())
+        whenever(node.getEntry(any())).thenThrow(LockNotAcquiredException())
 
         val reply = runBlocking { api.getEntry(GetEntryRequest.getDefaultInstance()) }
 
@@ -126,7 +126,7 @@ internal class ExternalNodeApiTest {
     fun `should fail get request in case of Exception`() {
         val api = ExternalNodeApi(node, Clock.systemUTC())
 
-        whenever(node.getItem(any())).thenThrow(RuntimeException())
+        whenever(node.getEntry(any())).thenThrow(RuntimeException())
 
         val reply = runBlocking { api.getEntry(GetEntryRequest.getDefaultInstance()) }
 

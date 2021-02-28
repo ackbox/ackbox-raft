@@ -12,7 +12,7 @@ import java.time.Clock
  */
 class ManagementNodeApi(private val node: LeaderNode, private val clock: Clock) : ManagementNodeCoroutineImplBase() {
 
-    private val logger: NodeLogger = NodeLogger.from(node.nodeId, ManagementNodeApi::class)
+    private val logger: NodeLogger = NodeLogger.forNode(node.nodeId, ManagementNodeApi::class)
 
     override suspend fun addNode(request: AddNodeRequest): AddNodeReply {
         logger.debug("Received add node request [{}]", request)

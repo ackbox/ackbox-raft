@@ -14,6 +14,7 @@ Reference: https://raft.github.io/raft.pdf
 - Make set and get accept custom key.
 - Trim log size.
 - Add unit test for truncateBeforeNonInclusive when log entry is in the very first segment.
+- Validate configuration parameters.
 
 ```kotlin
 // Check the state drift between leader and followers. If state drift is greater

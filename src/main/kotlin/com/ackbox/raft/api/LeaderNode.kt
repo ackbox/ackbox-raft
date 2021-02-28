@@ -1,7 +1,7 @@
 package com.ackbox.raft.api
 
 import com.ackbox.raft.networking.NodeAddress
-import com.ackbox.raft.types.LogItem
+import com.ackbox.raft.store.KV
 import java.nio.ByteBuffer
 
 /**
@@ -14,25 +14,25 @@ interface LeaderNode {
      */
     val nodeId: String
 
-    object SetItem {
-        data class Input(val type: LogItem.Type, val data: List<ByteArray>)
+    object SetEntry {
+        data class Input(val entry: ByteBuffer)
         data class Output(val leaderId: String?)
     }
 
     /**
-     * Set an item to the replicated log. Only leaders can perform this operation.
+     * Persist and replicate an entry to data store. Only leaders can perform this operation.
      */
-    fun setItem(input: SetItem.Input): SetItem.Output
+    fun setEntry(input: SetEntry.Input): SetEntry.Output
 
-    object GetItem {
+    object GetEntry {
         data class Input(val key: String)
-        data class Output(val leaderId: String?, val data: ByteBuffer?)
+        data class Output(val leaderId: String?, val entry: ByteBuffer?)
     }
 
     /**
-     * Get an item to the replicated log. Only leaders can perform this operation.
+     * Get an entry from data store. Only leaders can perform this operation.
      */
-    fun getItem(input: GetItem.Input): GetItem.Output
+    fun getEntry(input: GetEntry.Input): GetEntry.Output
 
     object AddNode {
         data class Input(val requestId: String, val address: NodeAddress)

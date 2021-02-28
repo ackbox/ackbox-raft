@@ -13,7 +13,7 @@ import javax.annotation.concurrent.ThreadSafe
 @ThreadSafe
 class KeyValueStore(config: NodeConfig) : StateMachine {
 
-    private val logger: NodeLogger = NodeLogger.from(config.nodeId, KeyValueStore::class)
+    private val logger: NodeLogger = NodeLogger.forNode(config.nodeId, KeyValueStore::class)
     private val store: MutableMap<String, KV> = ConcurrentHashMap()
 
     fun getValue(key: String): ByteArray? {
