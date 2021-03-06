@@ -11,7 +11,9 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 import java.util.zip.CRC32
+import javax.annotation.concurrent.NotThreadSafe
 
+@NotThreadSafe
 data class Segment(val firstItemIndex: Index, private val path: Path, private val maxSizeInBytes: Int) {
 
     private var channel: FileChannel? = null

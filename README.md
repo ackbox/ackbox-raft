@@ -1,45 +1,47 @@
 ## Ackbox Raft
 
-Simple implementation of Raft consensus algorithm.
+Partitioned data store implementation based on Raft consensus algorithm. This is a toy project and has never been used in production. I focused on providing a "simple" implementation for the Raft consensus algorithm. For that reason, the implementation was optimized for readability and not performance.  
 
 Reference: https://raft.github.io/raft.pdf
 
-### TODO:
+### Supported Features
+- Leader election and log replication.
+- Durable persistence.
+- Snapshot transfer and restore.
+- Membership changes.
+- Log compaction.
+- Support for sharding / multiple partitions.
 
-- Snapshot save and restore.
-- Implementation for replicated log.
-- Dynamic configuration.
-- Improve response codes.
-- Make set and get return multiple entries.
-- Make set and get accept custom key.
-- Trim log size.
-- Add unit test for truncateBeforeNonInclusive when log entry is in the very first segment.
-- Validate configuration parameters.
+### Main Components
 
-```kotlin
-// Check the state drift between leader and followers. If state drift is greater
-// than maximum allowed, prepare to send a snapshot to the follower.
-val stateDrift = log.getLastItemIndex() - state.matchLogIndex
-if (stateDrift > config.getMaxAllowedStateDrift()) {
-    remoteClient.installSnapshot()
-}
-```
+The following components provide the main functionality of the distributed data store:
 
-```kotlin
-@Test
-fun `should reject get of out-of-bounds log items`() {
-    val config = createConfig(UUID.randomUUID().toString())
-    val segmentedLog = SegmentedLog(config)
-    val firstItemIndex = segmentedLog.getFirstItemIndex()
-    val firstItem = Fixtures.createLogItem(firstItemIndex)
-    val outOfLowerBoundItemIndex = firstItemIndex - INDEX_DIFF
-    val outOfUpperBoundItemIndex = firstItemIndex + INDEX_DIFF
+![components.img](./docs/ackbox-raft-components.png)
 
-    segmentedLog.use { log ->
-        log.appendItems(listOf(firstItem))
-        assertEquals(firstItem, log.getItem(firstItemIndex))
-        assertThrows<IllegalStateException> { log.getItem(outOfLowerBoundItemIndex) }
-        assertThrows<IllegalStateException> { log.getItem(outOfUpperBoundItemIndex) }
-    }
-}
-```
+- __Internal API__: GRPC backed API exposing the operations defined in the Raft paper (e.g. vote, append, snapshot). It's essentially the definition of the API allowing the consensus
+- __Management API__: GRPC backed API with cluster management operations (e.g. addNode and removeNode). The management API is supposed to be only available to actors who intend to manage the health of the cluster.
+- __External API__: GRPC backed API exposing the data store operations (e.g. setEntry and getEntry). The external API is supposed to the only public interface/API of the data store.
+- __Remotes__: Component encapsulating the logic of contacting other nodes in the cluster. In Raft, there's a lot of state bookkeeping that nodes need to maintain about the other nodes in the cluster. This component provides a snapshot about the remote node states as a result of previous interactions with them. In more concrete terms, this component keeps track of `nextIndex` and `matchIndex` of each node in the cluster.
+- __Consensus State__: Component encapsulating all the state required by the Raft algorithm. That's where you will find the node's `currentTerm`, `votedFor`, `commitIndex` and `lastAppliedIndex` information.
+- __Replicated Log__: Write ahead log that is replicated across the nodes in the cluster. Raft ensures that log items are consistently replicated to the nodes in the cluster. Here we provided an implementation of Raft log based on the idea of [Segmented Logs](https://martinfowler.com/articles/patterns-of-distributed-systems/log-segmentation.html). The segmented log idea coupled with the snapshot support makes log compaction trivial process. 
+- __State Machine__: The replicated state machine per se in the Raft world. In this project, we provide a simple implementation for the state machine interface, which provides the data store functionality. Every state machine command is in reality a command that is sent to our data store. Currently, we only support "set" but nothing prevents us from supporting more complex commands like "update" or "delete".
+
+### Use Cases
+
+#### Set Entry
+
+The `SetEntry` is probably one of the simplest and most useful use cases to introduce Raft and the data store implemented in this project. Consider the following cluster composed of 3 nodes:
+
+![components.img](./docs/ackbox-raft-usecase-set.png)
+
+- An application (any external app actually) sends a `SetEntry` to the leader of the cluster.
+- The leader of the cluster performs some checks according to the Raft protocol. If everything goes well, it writes the command to its local log.
+- The leader then dispatches `AppendEntry` in parallel to all nodes in the cluster in order to replicate its own log changes.
+- Upon receiving the `AppendEntry` request from the leader, the other nodes in the cluster (in happy case all correctly setup as followers) compare and apply the leader changes to their own logs.
+- Once the leader receives successful responses from the majority of the node in the cluster, it notifies the application that the entry was properly committed.
+
+The use case explained above does not enter in details on what happens when there is a state drift between nodes or even when nodes. These are very interesting use cases as well. Take a look at the implementation to learn more about how Raft primitives were implemented in this project.
+
+### What's Next?
+
+Take a look at `Raft` class if you want to learn more about the internals of the implementation. The `Raft` class is the entry point of the data store - it's where everything starts. There are a few examples in the `examples` package where you can have an idea on how start up a cluster and learn more about the consensus algorithm implementation.
