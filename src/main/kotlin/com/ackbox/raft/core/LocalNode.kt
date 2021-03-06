@@ -71,13 +71,13 @@ class LocalNode(
     override fun setEntry(input: SetEntry.Input): SetEntry.Output {
         val operationId = UUID.randomUUID().toString()
         val entry = KV.fromByteArray(input.entry.array())
-        val partition = Partition(entry.key.hashCode() % config.partitionCount)
+        val partition = computePartition(entry.key)
         return locked.withLock(partition, REQUEST_APPEND_OPERATION, operationId) { state ->
             // Apply entries the replicated to the leader's log before doing anything.
             val consensusMetadata = state.metadata.consensusMetadata
             val lastItemIndex = state.log.getLastItemIndex()
             val leaderTerm = consensusMetadata.currentTerm
-            val items = convertToLogItems(Type.STORE_CHANGE, lastItemIndex, leaderTerm, listOf(entry.value))
+            val items = convertToLogItems(Type.STORE_CHANGE, lastItemIndex, leaderTerm, listOf(input.entry.array()))
             appendItem(operationId, state, items)
             return@withLock SetEntry.Output(consensusMetadata.leaderId)
         }
@@ -85,7 +85,7 @@ class LocalNode(
 
     override fun getEntry(input: GetEntry.Input): GetEntry.Output {
         val operationId = UUID.randomUUID().toString()
-        val partition = Partition(input.key.hashCode() % config.partitionCount)
+        val partition = computePartition(input.key)
         return locked.withLock(partition, REQUEST_RETRIEVE_OPERATION, operationId) { state ->
             // Check whether the current node is the leader. If not, simply fail the request letting caller know who is
             // the leader for the current term.
@@ -397,6 +397,10 @@ class LocalNode(
             val newItemIndex = lastItemIndex.incrementedBy(index.toLong() + 1)
             LogItem(type, newItemIndex, term, bytes)
         }
+    }
+
+    private fun computePartition(key: String): Partition {
+        return Partition((key.hashCode() % config.partitionCount) + 1)
     }
 
     companion object {
