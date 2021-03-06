@@ -125,7 +125,7 @@ class SegmentedLog(private val config: NodeConfig, private val partition: Partit
             // Last segment is either null or cannot fit the item. Whenever the segment
             // cannot store the new item or the segment is null (potentially on startup)
             // the current segment is closed and a new one is created.
-            logger.info("Creating a new segment for index [{}]", item.index)
+            logger.debug("Creating a new segment for index [{}]", item.index)
             lastSegment?.safelyClose()
             val logPath = config.getLogPath(partition)
             val maxSizeInBytes = config.maxLogSegmentSizeInBytes
@@ -150,7 +150,7 @@ class SegmentedLog(private val config: NodeConfig, private val partition: Partit
 
     private fun Segment.safelyClose() {
         try {
-            logger.info("Closing segment [{}]", this)
+            logger.debug("Closing segment [{}]", this)
             close()
         } catch (e: Exception) {
             logger.error("Error while closing segment [{}]", this)

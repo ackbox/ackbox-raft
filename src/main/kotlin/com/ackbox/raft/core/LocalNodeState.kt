@@ -74,11 +74,11 @@ class LockedPartitionState(
             if (!lock.tryLock(config.maxStateLockWaitTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 throw LockNotAcquiredException()
             }
-            logger.info("Locked for operation [{}::{}::{}]", partition, operationName, operationId)
+            logger.debug("Locked for operation [{}::{}::{}]", partition, operationName, operationId)
             val result = function(unsafeState)
             result
         } finally {
-            logger.info("Unlocked for operation [{}::{}::{}]", partition, operationName, operationId)
+            logger.debug("Unlocked for operation [{}::{}::{}]", partition, operationName, operationId)
             if (lock.isHeldByCurrentThread) {
                 lock.unlock()
             }
@@ -103,10 +103,10 @@ class PartitionState(
     private var heartbeatCallback: Callback? = null
 
     fun start(electionCallback: Callback, heartbeatCallback: Callback, snapshotCallback: Callback) {
-        logger.info("Loading state from persistent storage")
+        logger.debug("Loading state from persistent storage")
         loadState()
 
-        logger.info("Starting state timers")
+        logger.debug("Starting state timers")
         this.electionCallback = electionCallback
         this.heartbeatCallback = heartbeatCallback
         timer.restartElectionTimer(electionCallback)
@@ -114,10 +114,10 @@ class PartitionState(
     }
 
     fun stop() {
-        logger.info("Stopping state timers")
+        logger.debug("Stopping state timers")
         timer.stopAll()
 
-        logger.info("Saving state from persistent storage")
+        logger.debug("Saving state from persistent storage")
         log.close()
     }
 
@@ -128,7 +128,7 @@ class PartitionState(
             // Check whether the node that thinks it is the leader really has a term greater than the term known by this
             // node. In this case, reject the request and let the issuer of the request know that there is a node in the
             // cluster with a greater term.
-            logger.info("Term mismatch: currentTerm=[{}], leaderTerm=[{}]", currentTerm, leaderTerm)
+            logger.warn("Term mismatch: currentTerm=[{}], leaderTerm=[{}]", currentTerm, leaderTerm)
             throw RequestTermInvariantException(currentTerm, leaderTerm, log.getLastItemIndex())
         } else if (metadata.canAcceptLeader(leaderId) && leaderTerm > currentTerm) {
             // No leader set yet, so simply accept the current leader.
@@ -136,7 +136,7 @@ class PartitionState(
             refreshLeaderInformation(leaderId, leaderTerm)
         } else if (!metadata.matchesLeaderId(leaderId)) {
             // Force caller node to step down by incrementing the term.
-            logger.info("Multiple leaders detected: leaderId=[{}], otherId=[{}]", currentLeaderId, leaderId)
+            logger.warn("Multiple leaders detected: leaderId=[{}], otherId=[{}]", currentLeaderId, leaderId)
             transitionToFollower(currentTerm.incremented())
             throw LeaderMismatchException(currentLeaderId, currentTerm.incremented(), log.getLastItemIndex())
         }
@@ -146,20 +146,20 @@ class PartitionState(
         // Check whether the candidate node has a term greater than the term known by this node.
         val currentTerm = metadata.consensusMetadata.currentTerm
         if (currentTerm > candidateTerm) {
-            logger.info("Term mismatch: currentTerm=[{}] and candidateTerm=[{}]", currentTerm, candidateTerm)
+            logger.warn("Term mismatch: currentTerm=[{}] and candidateTerm=[{}]", currentTerm, candidateTerm)
             throw RequestTermInvariantException(currentTerm, candidateTerm, log.getLastItemIndex())
         }
 
         // Check whether the node can vote for the candidate. That means the node hasn't voted yet or has voted to the
         // same candidateId.
         if (!metadata.canAcceptLeader(candidateId)) {
-            logger.info("Vote not granted to candidateId [{}] - (reason: cannot vote)", candidateId)
+            logger.warn("Vote not granted to candidateId [{}] - (reason: cannot vote)", candidateId)
             throw VoteNotGrantedException(candidateId, currentTerm)
         }
 
         // Check whether the candidate node's log is caught up with the current node's log.
         if (log.isAheadOf(lastLogIndex, lastLogTerm)) {
-            logger.info("Vote not granted to candidateId [{}] - (reason: candidate log is behind)", candidateId)
+            logger.warn("Vote not granted to candidateId [{}] - (reason: candidate log is behind)", candidateId)
             throw VoteNotGrantedException(candidateId, currentTerm)
         }
     }
@@ -188,6 +188,7 @@ class PartitionState(
         val nextAppliedLogIndex = commitMetadata.lastAppliedLogIndex.incremented()
         if (commitIndex > nextAppliedLogIndex) {
             (nextAppliedLogIndex.value..commitIndex.value).forEach { index ->
+                logger.debug("Committing item at index [{}]", index)
                 val item = log.getItem(Index(index)) ?: throw IllegalStateException("Corrupted log at index [$index]")
                 when (item.type) {
                     LogItem.Type.STORE_CHANGE -> store.applyValue(item.value)
@@ -204,6 +205,7 @@ class PartitionState(
     }
 
     fun restoreSnapshot(lastIncludedLogIndex: Index, lastIncludedLogTerm: Term, sourceDataPath: Path) {
+        logger.debug("Loading snapshot from [{}]", sourceDataPath)
         // We try to find an item in the current node's log that matches the index and term from the snapshot provided.
         // If the item is found, it means that the log matching property is satisfied, thus all previous log items
         // (if existent) are compatible with the leader's log items.
@@ -214,9 +216,8 @@ class PartitionState(
 
         // If no item is found, we replace the state machine's state with the snapshot provided as well as reset the
         // logs so that the leader can properly replicate its own.
-        logger.info("Loading snapshot from [{}]", sourceDataPath)
         snapshot = Snapshot.fromCompressedData(sourceDataPath, config.getSnapshotPath(metadata.partition))
-        logger.info("Restoring snapshot [{}]", snapshot)
+        logger.debug("Restoring snapshot [{}]", snapshot)
 
         store.restoreSnapshot(snapshot.dataPath)
         networking.restoreSnapshot(snapshot.dataPath)
@@ -232,7 +233,7 @@ class PartitionState(
         val snapshotPath = Files.createTempDirectory(UUID.randomUUID().toString())
         val lastIncludedLogIndex = metadata.commitMetadata.lastAppliedLogIndex
         val lastIncludedLogTerm = metadata.commitMetadata.lastAppliedLogTerm
-        logger.info("Snapshot lastLogIndex=[{}] and lastLogTerm=[{}]", lastIncludedLogIndex, lastIncludedLogTerm)
+        logger.debug("Snapshot lastLogIndex=[{}] and lastLogTerm=[{}]", lastIncludedLogIndex, lastIncludedLogTerm)
         try {
             store.takeSnapshot(snapshotPath)
             networking.takeSnapshot(snapshotPath)

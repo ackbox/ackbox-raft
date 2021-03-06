@@ -40,7 +40,7 @@ interface NodeAddress : Comparable<NodeAddress> {
  */
 data class NodeNetAddress(override val nodeId: String, val host: String, val port: Int) : NodeAddress {
 
-    private val logger: NodeLogger = NodeLogger.forNode(nodeId, NodeNetworking::class)
+    private val logger: NodeLogger = NodeLogger.forNode(nodeId, NodeNetAddress::class)
 
     override fun toServer(vararg api: BindableService): Server {
         logger.info("Creating server on port [{}]@[{}]", port, nodeId)
@@ -69,7 +69,7 @@ data class NodeNetAddress(override val nodeId: String, val host: String, val por
  */
 data class NodeInmemoryAddress(override val nodeId: String) : NodeAddress {
 
-    private val logger: NodeLogger = NodeLogger.forNode(nodeId, NodeNetworking::class)
+    private val logger: NodeLogger = NodeLogger.forNode(nodeId, NodeInmemoryAddress::class)
 
     override fun toServer(vararg api: BindableService): Server {
         logger.info("Creating in-memory server for [{}]", nodeId)

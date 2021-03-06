@@ -11,7 +11,6 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.nio.ByteBuffer
 import java.time.Duration
 import java.util.UUID
 
@@ -21,12 +20,8 @@ object Configuration {
     private val nodeAddress2 = NodeNetAddress("2", "localhost", 50052)
     private val nodeAddress3 = NodeNetAddress("3", "localhost", 50053)
 
-    val node1Config
-        get() = NodeConfig.newConfig(nodeAddress1, nodeAddress1, nodeAddress2, nodeAddress3)
-            .copy(snapshotDelay = Duration.ofSeconds(10))
-
+    val node1Config get() = NodeConfig.newConfig(nodeAddress1, nodeAddress1, nodeAddress2, nodeAddress3)
     val node2Config get() = NodeConfig.newConfig(nodeAddress2, nodeAddress1, nodeAddress2, nodeAddress3)
-
     val node3Config get() = NodeConfig.newConfig(nodeAddress3, nodeAddress1, nodeAddress2, nodeAddress3)
 }
 
@@ -59,9 +54,10 @@ class LoopNode(private val config: NodeConfig) {
     private fun createRequest(): SetEntryRequest {
         val key = UUID.randomUUID().toString()
         val data = UUID.randomUUID().toString().toByteArray()
+        val kv = KV(key, data)
         return SetEntryRequest.newBuilder()
             .setTimestamp(System.currentTimeMillis())
-            .setEntry(ByteString.copyFrom(KV(key, data).toByteArray()))
+            .setEntry(ByteString.copyFrom(kv.toByteArray()))
             .build()
     }
 

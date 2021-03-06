@@ -28,7 +28,7 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             val output = node.setEntry(input)
             createSuccessSetEntryReply(output.leaderId)
         } catch (e: NotLeaderException) {
-            logger.warn("Received set entry request while not leader=[{}]", e.knownLeaderId, e)
+            logger.warn("Received set entry request while not leader=[{}]", e.knownLeaderId)
             createFailureSetEntryReply(e.knownLeaderId, SetEntryReply.Status.NOT_LEADER)
         } catch (e: CommitIndexMismatchException) {
             logger.warn("Commit index mismatch for set entry request", e)
@@ -49,7 +49,7 @@ class ExternalNodeApi(private val node: LeaderNode, private val clock: Clock) : 
             val output = node.getEntry(input)
             createSuccessGetEntryReply(output.leaderId, output.entry)
         } catch (e: NotLeaderException) {
-            logger.warn("Received get entry request while not leader=[{}]", e.knownLeaderId, e)
+            logger.warn("Received get entry request while not leader=[{}]", e.knownLeaderId)
             createFailureGetEntryReply(e.knownLeaderId, GetEntryReply.Status.NOT_LEADER)
         } catch (e: LockNotAcquiredException) {
             logger.warn("Unable to complete request since node is busy", e)
