@@ -3,7 +3,7 @@ package com.ackbox.raft.types
 import java.nio.file.Paths
 import java.time.Duration
 
-const val PARTITION_COUNT: Int = 2
+const val PARTITION_COUNT: Int = 1
 
 val SNAPSHOT_DELAY: Duration = Duration.ofMinutes(1)
 val STATE_LOCK_WAIT_TIMEOUT: Duration = Duration.ofSeconds(2)
